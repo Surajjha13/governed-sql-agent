@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDEs
+.vscode/
+.idea/
+
+# System
+.DS_Store
+Thumbs.db
+
+# Project specific
+tests/eval_results.json
+*.log
+.ipynb_checkpoints/
+models/

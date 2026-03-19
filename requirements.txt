@@ -1,0 +1,31 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+
+groq
+pandas
+fpdf2
+xlsxwriter
+
+pydantic
+sqlparse
+regex
+sqlglot
+
+psycopg2-binary
+pyodbc
+
+httpx
+requests
+
+orjson
+typing-extensions
+click
+
+# Semantic Search & Embeddings
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+faiss-cpu
+numpy
+sentence-transformers

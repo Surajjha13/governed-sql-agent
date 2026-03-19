@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In | SQL Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --text: #0f172a;
+            --text-muted: #64748b;
+            --brand: #6366f1;
+            --brand-hover: #4f46e5;
+            --border: #e2e8f0;
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        h1, h2, h3 {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        /* Nav link back */
+        .back-link {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            text-decoration: none;
+            color: var(--text-muted);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: color 0.2s;
+        }
+        .back-link:hover {
+            color: var(--brand);
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 440px;
+        }
+
+        .logo-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: var(--text);
+            font-weight: 800;
+            font-size: 1.5rem;
+            margin-bottom: 16px;
+        }
+
+        .logo-box {
+            width: 42px;
+            height: 42px;
+            background: var(--brand);
+            border-radius: 12px;
+            display: grid;
+            place-items: center;
+            color: white;
+            font-size: 1.25rem;
+        }
+
+        .logo-header p {
+            color: var(--text-muted);
+            font-size: 1.05rem;
+        }
+
+        .login-card {
+            background: white;
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: var(--shadow-xl);
+            border: 1px solid var(--border);
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+            color: var(--text);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            font-size: 1rem;
+            font-family: inherit;
+            transition: all 0.2s;
+            background: #f8fafc;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--brand);
+            background: white;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 1rem;
+            text-align: center;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--brand);
+            color: white;
+            box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39);
+        }
+
+        .btn-primary:hover {
+            background: var(--brand-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.5);
+        }
+
+        .error-message {
+            color: #ef4444;
+            background: #fef2f2;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 20px;
+            display: none;
+            border: 1px solid #fee2e2;
+        }
+
+        .login-footer {
+            margin-top: 32px;
+            text-align: center;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .login-footer a {
+            color: var(--brand);
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .login-footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Ambient background */
+        .ambient-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .ambient-blob {
+            position: absolute;
+            filter: blur(80px);
+            opacity: 0.5;
+            border-radius: 50%;
+            animation: float 20s infinite ease-in-out alternate;
+        }
+
+        .blob-1 {
+            top: -10%;
+            left: -10%;
+            width: 50vw;
+            height: 50vw;
+            background: rgba(99, 102, 241, 0.15);
+        }
+
+        .blob-2 {
+            bottom: -20%;
+            right: -10%;
+            width: 60vw;
+            height: 60vw;
+            background: rgba(56, 189, 248, 0.1);
+            animation-delay: -5s;
+        }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(5%, 10%) scale(1.1); }
+        }
+
+        @media (max-width: 768px) {
+            .back-link {
+                top: 20px;
+                left: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-bg">
+        <div class="ambient-blob blob-1"></div>
+        <div class="ambient-blob blob-2"></div>
+    </div>
+
+    <a href="landing.html" class="back-link">
+        &larr; Back to Home
+    </a>
+
+    <div class="login-container">
+        <div class="logo-header">
+            <div class="logo">
+                <div class="logo-box">A</div>
+                SQL Agent
+            </div>
+            <p>Sign in to your enterprise workspace</p>
+        </div>
+
+        <div class="login-card">
+            <div id="errorMessage" class="error-message"></div>
+
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" class="form-control" required placeholder="Enter your username" autocomplete="username">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" class="form-control" required placeholder="••••••••" autocomplete="current-password">
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="loginBtn">
+                    Sign In &rarr;
+                </button>
+            </form>
+        </div>
+
+        <div class="login-footer">
+            Need an account? <a href="#">Contact your administrator</a>
+        </div>
+    </div>
+
+    <script src="/js/auth.js?v=login"></script>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value;
+            const btn = document.getElementById('loginBtn');
+            const errorDiv = document.getElementById('errorMessage');
+
+            if (!user || !pass) return;
+
+            btn.disabled = true;
+            btn.innerHTML = 'Signing in...';
+            errorDiv.style.display = 'none';
+
+            try {
+                const res = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user, password: pass })
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.detail || 'Invalid username or password');
+                }
+
+                const data = await res.json();
+                
+                // Store authentication token
+                localStorage.setItem('sql_agent_token', data.token);
+                localStorage.setItem('sql_agent_user', JSON.stringify({
+                    username: data.user.username,
+                    role: data.user.role,
+                    role_label: data.role_label
+                }));
+
+                // Redirect based on role
+                if (data.user.role === 'SYSTEM_ADMIN') {
+                    window.location.href = '/admin.html';
+                } else {
+                    window.location.href = '/workspace';
+                }
+            } catch (err) {
+                errorDiv.textContent = err.message;
+                errorDiv.style.display = 'block';
+                btn.disabled = false;
+                btn.innerHTML = 'Sign In &rarr;';
+            }
+        });
+    </script>
+</body>
+</html>

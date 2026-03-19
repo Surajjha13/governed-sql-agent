@@ -1,0 +1,41 @@
+[
+    {
+        "question": "What is our total revenue?",
+        "expected_sql": "SELECT SUM((p.\"Price\" * s.\"Quantity\") - COALESCE(s.\"Discount\", 0)) FROM \"public\".\"Products\" p JOIN \"public\".\"Sales\" s ON p.\"ProductID\" = s.\"ProductID\"",
+        "keywords": [
+            "SUM",
+            "Price",
+            "Quantity",
+            "Discount"
+        ]
+    },
+    {
+        "question": "Top 5 customers by order count",
+        "expected_sql": "SELECT \"CustomerID\", COUNT(\"OrderID\") as \"OrderCount\" FROM \"public\".\"Orders\" GROUP BY \"CustomerID\" ORDER BY \"OrderCount\" DESC LIMIT 5",
+        "keywords": [
+            "COUNT",
+            "GROUP BY",
+            "ORDER BY",
+            "LIMIT"
+        ]
+    },
+    {
+        "question": "Show products in the 'Seafood' category",
+        "expected_sql": "SELECT p.* FROM \"public\".\"Products\" p JOIN \"public\".\"Categories\" c ON p.\"CategoryID\" = c.\"CategoryID\" WHERE c.\"CategoryName\" = 'Seafood'",
+        "keywords": [
+            "JOIN",
+            "WHERE",
+            "Seafood"
+        ]
+    },
+    {
+        "question": "Most expensive product in each category",
+        "expected_sql": "SELECT \"CategoryID\", \"ProductName\", \"UnitPrice\" FROM (SELECT \"CategoryID\", \"ProductName\", \"UnitPrice\", ROW_NUMBER() OVER(PARTITION BY \"CategoryID\" ORDER BY \"UnitPrice\" DESC) as rn FROM \"public\".\"Products\") t WHERE rn = 1",
+        "keywords": [
+            "ROW_NUMBER",
+            "OVER",
+            "PARTITION BY",
+            "ORDER BY"
+        ]
+    }
+]

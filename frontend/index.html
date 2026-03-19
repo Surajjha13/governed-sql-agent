@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Agent | Professional Data Insights</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">▲</span>
+                <h1>SQL Agent</h1>
+            </div>
+
+            <nav class="sidebar-nav">
+                <button class="nav-item active" id="nav-dashboard">
+                    <span class="icon">📊</span> Dashboard
+                </button>
+                <button class="nav-item" id="nav-history">
+                    <span class="icon">⏳</span> History
+                </button>
+                <button class="nav-item" id="btn-show-ai-settings">
+                    <span class="icon">🤖</span> LLM Configuration
+                </button>
+                <a href="/admin" class="nav-item nav-hidden" id="nav-admin" style="text-decoration: none;">
+                    <span class="icon">⚙️</span> Admin Panel
+                </a>
+            </nav>
+
+            <div class="connection-status" id="connection-status">
+                <div class="status-indicator disconnected"></div>
+                <span class="status-text">Disconnected</span>
+                <button id="btn-show-connect" class="btn-secondary">Connect DB</button>
+            </div>
+
+            <div class="schema-explorer" id="schema-explorer">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h3 style="margin: 0;">Schema</h3>
+                </div>
+                <div class="schema-content" id="schema-content">
+                    <p class="empty-msg">Connect to a database to view schema.</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- ── Dashboard View ── -->
+            <div id="dashboard-view" style="display: flex; flex-direction: column; height: 100%; width: 100%;">
+                <header class="chat-header">
+                    <div class="agent-info">
+                        <div class="agent-avatar">
+                            <img src="https://img.icons8.com/isometric/50/database.png" alt="Agent" />
+                        </div>
+                    <div class="agent-details">
+                        <h2>Data Agent</h2>
+                        <p class="connection-info">Connected to <span id="connected-db-name">sql_agent_db</span></p>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button id="btn-disconnect" class="btn-text danger">Disconnect</button>
+                </div>
+            </header>
+
+            <div class="chat-container">
+                <div id="chat-messages" class="message-list">
+                    <!-- Messages will be injected here -->
+                    <div class="message bot">
+                        <div class="bubble">
+                            <p>Hello! 👋</p>
+                            <p>I'm connected to your database. Ask me anything, and I'll generate Insights for
+                                you.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Floating Input Area -->
+                <div class="chat-input-container">
+                    <div class="input-wrapper">
+                        <input type="text" id="query-input" placeholder="Ask a question about your data..."
+                            autocomplete="off" />
+                        <button id="btn-run-query" class="btn-send">
+                            <span>Ask</span>
+                        </button>
+                    </div>
+                </div>
+
+                </div>
+
+                <!-- Localized Loading Overlay -->
+                <div class="loading-overlay" id="loading-overlay" style="display: none;">
+                    <div class="loader"></div>
+                    <p id="loading-text">Processing your request...</p>
+                </div>
+            </div> <!-- End Dashboard View -->
+
+            <!-- ── History View ── -->
+            <div id="history-view" style="display: none; flex-direction: column; height: 100%; width: 100%; padding: 24px; overflow-y: auto;">
+                <header style="margin-bottom: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h2>Chat History</h2>
+                        <p style="color: #666; font-size: 0.9rem; margin: 0;">Past queries and insights for <span id="history-db-name" style="font-weight: 600; color: var(--brand);">None</span></p>
+                    </div>
+                    <!-- History Filtering Toolbar -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; background: #f8f9fa; padding: 14px 20px; border-radius: 8px; border: 1px solid #eee;">
+                        <div style="display: flex; align-items: center; gap: 16px;">
+                            <span style="font-size: 0.9rem; font-weight: 600; color: #555;">Filter by Date:</span>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="date" id="history-filter-start" class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; border-color: #ddd; width: 150px;">
+                                <span style="font-size: 0.8rem; color: #999;">to</span>
+                                <input type="date" id="history-filter-end" class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; border-color: #ddd; width: 150px;">
+                            </div>
+                            <div style="display: flex; gap: 8px; margin-left: 8px;">
+                                <button id="btn-apply-history-filter" class="btn-primary" style="padding: 6px 16px; font-size: 0.8rem;">Apply</button>
+                                <button id="btn-clear-history-filter" class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;">Clear</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 12px; white-space: nowrap;">
+                            <span style="font-size: 0.9rem; font-weight: 600; color: #555;">Sort By:</span>
+                            <select id="history-sort" class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; border-color: #ddd; background: white; min-width: 140px;">
+                                <option value="desc">Most Recent First</option>
+                                <option value="asc">Oldest First</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Bulk Actions Toolbar -->
+                    <div id="bulk-history-actions" style="display: none; align-items: center; justify-content: space-between; background: #fff; padding: 12px 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eaeaea;">
+                        <div style="display: flex; align-items: center; gap: 24px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="checkbox" id="selectAllHistory" style="cursor: pointer; width: 18px; height: 18px;">
+                                <label for="selectAllHistory" style="font-size: 0.85rem; font-weight: 600; cursor: pointer; user-select: none; color: #444;">Select All</label>
+                            </div>
+                            <span id="selected-history-count" style="font-size: 0.85rem; font-weight: 500; color: var(--brand);">(0 selected)</span>
+                        </div>
+                        <div style="display: flex; gap: 12px;">
+                            <button id="btn-bulk-export-pdf" class="btn-secondary" style="padding: 8px 16px; font-size: 0.875rem; width: auto;" disabled>📄 Export PDF</button>
+                            <button id="btn-bulk-delete" class="btn-danger" disabled>🗑️ Delete Selected</button>
+                        </div>
+                    </div>
+                </header>
+                
+                <div id="history-list" class="message-list" style="background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); padding: 20px; flex: 1;">
+                    <p class="empty-msg" style="text-align: center; color: #888; padding: 40px 0;">No history available for this database.</p>
+                </div>
+            </div> <!-- End History View -->
+
+        </main>
+    </div>
+
+    <!-- Connection Modal -->
+    <div class="modal-overlay" id="connect-modal" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Database Connection</h3>
+                <button class="btn-close" id="btn-close-modal">&times;</button>
+            </div>
+            <form id="connect-form" class="modal-body">
+                <div class="form-group">
+                    <label>Engine</label>
+                    <select name="engine" id="db-engine">
+                        <option value="postgres">PostgreSQL</option>
+                        <option value="sqlserver">SQL Server</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Host</label>
+                        <input type="text" name="host" placeholder="localhost" required>
+                        <div style="font-size: 10px; color: #666; margin-top: 2px;">Use
+                            <code>host.docker.internal</code> for local DBs when running in Docker
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Port</label>
+                        <input type="number" name="port" value="5432" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Database Name</label>
+                    <input type="text" name="database" required>
+                </div>
+                <div class="form-group">
+                    <label>User</label>
+                    <input type="text" name="user" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" name="password" required>
+                </div>
+                <button type="submit" class="btn-primary w-full">Establish Connection</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- LLM Configuration Modal -->
+    <div class="modal-overlay" id="ai-settings-modal" style="display: none;">
+        <div class="modal" style="width: 550px;">
+            <div class="modal-header">
+                <h3>LLM Configuration</h3>
+                <button class="btn-close" id="btn-close-ai-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: #666; margin-bottom: 20px;">
+                    Select your AI provider and provide an API key. If left blank, our <strong>System API</strong> will be used.
+                </p>
+                
+                <div class="form-group">
+                    <label>Active Provider</label>
+                    <div class="provider-grid">
+                        <div class="provider-card selected" id="providerGroq" onclick="selectProvider('groq')">
+                            <div class="provider-icon"><img src="/llm_svgs/groq-icon-seeklogo.svg" alt="Groq"></div>
+                            <div class="provider-info">
+                                <h4>Groq</h4>
+                            </div>
+                        </div>
+                        <div class="provider-card" id="providerOpenai" onclick="selectProvider('openai')">
+                            <div class="provider-icon"><img src="/llm_svgs/open-ai-seeklogo.svg" alt="OpenAI"></div>
+                            <div class="provider-info">
+                                <h4>OpenAI</h4>
+                            </div>
+                        </div>
+                        <div class="provider-card" id="providerAnthropic" onclick="selectProvider('anthropic')">
+                            <div class="provider-icon"><img src="/llm_svgs/anthropic.svg" alt="Anthropic"></div>
+                            <div class="provider-info">
+                                <h4>Anthropic</h4>
+                            </div>
+                        </div>
+                        <div class="provider-card" id="providerGemini" onclick="selectProvider('gemini')">
+                            <div class="provider-icon"><img src="/llm_svgs/gemini-icon-seeklogo.svg" alt="Gemini"></div>
+                            <div class="provider-info">
+                                <h4>Gemini</h4>
+                            </div>
+                        </div>
+                        <div class="provider-card" id="providerDeepseek" onclick="selectProvider('deepseek')">
+                            <div class="provider-icon"><img src="/llm_svgs/deepseek-color.svg" alt="DeepSeek"></div>
+                            <div class="provider-info">
+                                <h4>DeepSeek</h4>
+                            </div>
+                        </div>
+                        <div class="provider-card" id="providerCustom" onclick="selectProvider('custom')">
+                            <div class="provider-icon"><span style="font-size: 1.5rem;">⚙️</span></div>
+                            <div class="provider-info">
+                                <h4>Custom</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group" id="user-llm-base-url-group" style="display: none;">
+                    <label>Base URL (Custom Provider Only)</label>
+                    <input type="text" id="user-llm-base-url" placeholder="https://api.yourprovider.com/v1/chat/completions">
+                </div>
+
+                <div class="form-group">
+                    <label>API Key (Optional)</label>
+                    <input type="password" id="user-llm-api-key" placeholder="Enter your key here...">
+                </div>
+
+                <div class="form-group" style="position: relative;">
+                    <label>Model Name</label>
+                    <div style="position: relative; display: flex; align-items: center;">
+                        <input type="text" id="user-llm-model" placeholder="e.g. llama-3.3-70b-versatile" style="flex: 1; padding-right: 85px;">
+                        <button class="btn-discover-compact" id="btn-discover-models" onclick="discoverModels()">✨ Discover</button>
+                    </div>
+                </div>
+
+                <div id="discovered-models-container" style="display: none; margin-top: 10px; padding: 12px; background: #f1f5f9; border-radius: 8px; border: 1px solid #cbd5e1;">
+                    <p style="font-size: 0.75rem; font-weight: 600; margin-bottom: 8px; color: #475569;">Available Models</p>
+                    <div id="discovered-models-list" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+                </div>
+
+                <div class="status-box" id="ai-status-box" style="margin-top: 16px; padding: 12px; border-radius: 8px; font-size: 0.85rem; border: 1px solid transparent;">
+                    <span id="ai-status-text">Using System API</span>
+                </div>
+
+                <!-- Stress Test Configuration & Progress -->
+                <div id="ai-stress-test-controls" style="margin-top: 20px; padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; display: none;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <label style="font-size: 0.85rem; font-weight: 600; margin: 0;">Stress Test Requests</label>
+                        <input type="number" id="stress-test-count" value="10" min="1" max="50" style="width: 70px; padding: 4px 8px; font-size: 0.9rem;">
+                    </div>
+                    <div id="stress-test-grid" class="stress-grid">
+                        <!-- Dots will be injected here -->
+                    </div>
+                    <div id="stress-test-status-text" style="font-size: 0.75rem; color: #64748b; margin-top: 8px; text-align: center;">Ready to start burst test</div>
+                </div>
+
+                <!-- Rate Limit & Model Recommendations Box -->
+                <div id="ai-rate-limit-box" class="rate-limit-warning">
+                    <h5><span class="icon">❌</span> Rate Limit Reached</h5>
+                    <div id="ai-rate-limit-msg" class="rate-limit-details"></div>
+                    <div class="rate-limit-recs">
+                        <p>Try one of these models:</p>
+                        <div id="ai-model-recs-list">
+                            <!-- Recommendations will be injected here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; gap: 10px;">
+                <button id="btn-clear-ai-settings" class="btn-secondary btn-clear-settings" style="flex: 1;">Clear Settings</button>
+                <button id="btn-save-ai-settings" class="btn-primary" style="flex: 2;">Save LLM Settings</button>
+                <button id="btn-test-ai-settings" class="btn-secondary btn-test-api" style="flex: 1;">Test API</button>
+                <button id="btn-stress-test-ai" class="btn-secondary btn-stress-test" style="flex: 1;">Stress Test</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Visualization Modal -->
+    <div class="modal-overlay" id="viz-modal" style="display: none;">
+        <div class="modal" style="width: 80%; max-width: 900px; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h3 id="viz-title">Visualize Data</h3>
+                <button class="btn-close" id="btn-close-viz">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="viz-container" style="width: 100%; height: 500px;"></div>
+
+                <!-- KPI Card Container (Now uses shared styles) -->
+                <div id="kpi-container"
+                    style="display: none; align-items: center; justify-content: center; height: 500px; flex-direction: column;">
+                    <div class="kpi-metric-card" style="max-width: 500px; padding: 60px;">
+                        <div id="kpi-title" class="kpi-metric-title">Metric Name</div>
+                        <div id="kpi-value" class="kpi-metric-value" style="font-size: 5rem;">0</div>
+                        <div id="kpi-subtitle" class="kpi-metric-subtitle">Generated Insight</div>
+                    </div>
+                </div>
+
+                <div id="viz-recommendation-bar"
+                    style="background: rgba(84, 112, 198, 0.1); padding: 8px 16px; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 1.2rem;">✨</span>
+                        <span style="font-weight: 600; color: var(--accent-primary);">Recommended: <span
+                                id="rec-chart-name">Line Chart</span></span>
+                        <span class="confidence-badge" id="rec-confidence"
+                            style="background: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">95%
+                            Match</span>
+                        <span id="rec-auto-opened" class="viz-auto-opened-badge" style="display: none;">Auto-opened</span>
+                    </div>
+                    <span id="rec-reason" style="font-size: 0.85rem; color: #666; font-style: italic;">Based on
+                        time-series data</span>
+                </div>
+
+            </div>
+            <div class="modal-footer"
+                style="padding: 16px; border-top: 1px solid var(--border-color); display: flex; gap: 12px; justify-content: center;">
+                <button class="btn-secondary viz-option-btn" data-type="line">Line Chart</button>
+                <button class="btn-secondary viz-option-btn" data-type="bar">Bar Chart</button>
+                <button class="btn-secondary viz-option-btn" data-type="candlestick">Candlestick</button>
+                <button class="btn-secondary viz-option-btn" data-type="pie">Pie Chart</button>
+                <button class="btn-secondary viz-option-btn" data-type="scatter">Scatter Plot</button>
+                <button class="btn-secondary viz-option-btn" data-type="histogram">Histogram</button>
+                <button class="btn-secondary viz-option-btn" data-type="area">Area Chart</button>
+                <button class="btn-secondary viz-option-btn" data-type="kpi">KPI Card</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Apache ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>

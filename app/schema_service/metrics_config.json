@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Revenue",
+    "formula": "SUM((p.\"Price\" * s.\"Quantity\") - COALESCE(s.\"Discount\", 0))",
+    "description": "Total sales revenue after discounts. Requires joining Products (p) and Sales (s).",
+    "required_tables": ["Products", "Sales"]
+  },
+  {
+    "name": "AOV",
+    "formula": "SUM((p.\"Price\" * s.\"Quantity\") - COALESCE(s.\"Discount\", 0)) / COUNT(DISTINCT s.\"SaleID\")",
+    "description": "Average Order Value. Total revenue divided by number of sales.",
+    "required_tables": ["Products", "Sales"]
+  },
+  {
+    "name": "Retention Rate",
+    "formula": "COUNT(DISTINCT repeated_customers) / COUNT(DISTINCT all_customers)",
+    "description": "Calculated as percentage of customers with > 1 purchase. Logic depends on Customers and Orders.",
+    "required_tables": ["Customers", "Orders"]
+  }
+]

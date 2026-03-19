@@ -1,0 +1,11 @@
+__pycache__/
+.env
+.env.*
+*.log
+.git
+.gitignore
+.vscode
+.idea
+node_modules
+data/
+notebooks/

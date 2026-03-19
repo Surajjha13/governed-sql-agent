@@ -1,0 +1,18 @@
+{
+  "users": {
+    "suraj": {
+      "blocked_tables": [
+        "categories",
+        "cities",
+        "countries",
+        "customers",
+        "sales",
+        "employees",
+        "actor",
+        "actor_info",
+        "address"
+      ],
+      "blocked_columns": []
+    }
+  }
+}
