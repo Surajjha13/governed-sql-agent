@@ -3,7 +3,7 @@ from typing import List, Optional
 
 
 class DBConnectionRequest(BaseModel):
-    engine: str          # "postgres" | "mysql" | "sqlserver"
+    engine: str          # "postgres" | "mysql"
     host: str
     port: int
     database: str

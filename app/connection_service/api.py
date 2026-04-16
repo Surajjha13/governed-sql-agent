@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Body, Header, Depends
+from fastapi import APIRouter, HTTPException, Body, Header, Depends, BackgroundTasks
 from typing import Optional
 from app.schema_service.models import DBConnectionRequest, SchemaResponse
 import app.app_state as app_state
@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 @router.post("/connect", response_model=SchemaResponse)
 async def connect_database(
     conn: DBConnectionRequest,
+    background_tasks: BackgroundTasks,
     x_session_id: Optional[str] = Header(None),
     current_user = Depends(get_current_user)
 ):
@@ -26,6 +27,9 @@ async def connect_database(
     try:
         logger.info(f"Session {session_id} connection request for {conn.database} by {current_user.username}")
         schema = await app_state.connect_to_db(session_id, conn)
+        
+        # Phase 2: Start AI indexing in background
+        background_tasks.add_task(app_state.build_semantic_index_background, session_id)
         
         from app.auth.policies import filter_schema_for_user
         filtered_schema = filter_schema_for_user(schema, current_user.username)
@@ -74,6 +78,7 @@ async def connection_status(
         safe_conn = dict(state.current_connection)
         if "password" in safe_conn:
             safe_conn["password"] = "****"
+        safe_conn["is_indexing"] = state.is_indexing
         return safe_conn
     
     # NEW: Prevent redundant restoration if already in progress
@@ -88,6 +93,11 @@ async def connection_status(
 
     last_conn = user_manager.get_last_connection(current_user.username)
     if last_conn:
+        if not last_conn.get("password"):
+            return {
+                "connected": False,
+                "message": "Saved connection metadata found, but the password is not stored. Please reconnect to restore access."
+            }
         try:
             logger.info(f"Attempting to restore persistent connection for {current_user.username}...")
             from app.schema_service.models import DBConnectionRequest
@@ -98,6 +108,8 @@ async def connection_status(
             if is_docker and conn_req.host in ["localhost", "127.0.0.1"]:
                  conn_req.host = "host.docker.internal"
                  
+            # Background indexing is not supported for auto-restoration yet, 
+            # but we can add it if needed. For now, just connect.
             await app_state.connect_to_db(session_id, conn_req)
             
             # Return restored status

@@ -67,39 +67,118 @@ def table_score(table: TableMeta, question_tokens: Set[str], vector_hits: List[D
 
     return score
 
-def expand_foreign_key_tables(initial_table_names: Set[str], schema: SchemaResponse, max_depth: int = 2) -> Set[str]:
-    """
-    Find all tables related to the selected tables through foreign keys,
-    including multi-hop relationships up to max_depth.
-    """
-    expanded = set(initial_table_names)
-    table_meta_map = {t.table: t for t in schema.tables}
+def build_schema_graph(schema: SchemaResponse) -> Dict[str, List[Dict]]:
+    """Build bidirectional adjacency graph from FK metadata."""
+    graph = {}
+    for table in schema.tables:
+        graph.setdefault(table.table, [])
+        for col in table.columns:
+            if col.foreign_key:
+                # FK format: "table.col" or "schema.table.col"
+                parts = col.foreign_key.split(".")
+                if len(parts) >= 2:
+                    target_table = parts[-2]
+                    target_col = parts[-1]
+                    
+                    # Forward edge
+                    graph[table.table].append({
+                        "table": target_table,
+                        "from_table": table.table,
+                        "from_col": col.name,
+                        "to_col": target_col,
+                        "type": "fk"
+                    })
+                    # Reverse edge
+                    graph.setdefault(target_table, [])
+                    graph[target_table].append({
+                        "table": table.table,
+                        "from_table": target_table,
+                        "from_col": target_col,
+                        "to_col": col.name,
+                        "type": "rev_fk"
+                    })
+    return graph
 
-    for _ in range(max_depth):
-        new_tables = set()
-        for t_name in expanded:
-            table_meta = table_meta_map.get(t_name)
-            if not table_meta: continue
-
-            # Forward FKs
-            for col in table_meta.columns:
-                if col.foreign_key:
-                    target_table = col.foreign_key.split('.')[0]
-                    if target_table not in expanded:
-                        new_tables.add(target_table)
-
-            # Reverse FKs
-            for other_name, other_meta in table_meta_map.items():
-                if other_name in expanded: continue
-                for other_col in other_meta.columns:
-                    if other_col.foreign_key and other_col.foreign_key.split('.')[0] == t_name:
-                        new_tables.add(other_name)
-                        break
+def find_join_path(graph: Dict[str, List[Dict]], start_table: str, end_table: str) -> List[Dict]:
+    """BFS to find shortest join path between two tables."""
+    if start_table == end_table:
+        return []
         
-        if not new_tables: break
-        expanded.update(new_tables)
+    from collections import deque
+    queue = deque([(start_table, [])])
+    visited = {start_table}
+    
+    while queue:
+        current, path = queue.popleft()
+        for edge in graph.get(current, []):
+            nxt = edge["table"]
+            # To avoid adding the target table over and over, check nxt
+            if nxt == end_table:
+                return path + [edge]
+            if nxt not in visited:
+                visited.add(nxt)
+                queue.append((nxt, path + [edge]))
+    return []
 
-    return expanded
+def get_tables_in_paths(graph: Dict[str, List[Dict]], initial_tables: Set[str]) -> tuple[Set[str], List[Dict]]:
+    """Find a connected set of tables holding the initial ones using shortest paths, then expand 2 hops."""
+    if not initial_tables:
+        return set(), []
+        
+    tables_list = list(initial_tables)
+    connected_tables = {tables_list[0]}
+    all_path_edges = []
+    
+    # Track signatures to avoid duplicate edge objects
+    edge_signatures = set()
+    
+    def add_edge_if_new(edge):
+        # We uniquely identify an edge by its table and column pairs
+        sig1 = (edge["from_table"], edge["from_col"], edge["table"], edge["to_col"])
+        sig2 = (edge["table"], edge["to_col"], edge["from_table"], edge["from_col"])
+        if sig1 not in edge_signatures:
+            edge_signatures.add(sig1)
+            edge_signatures.add(sig2)
+            all_path_edges.append(edge)
+
+    # 1. Connect initial tables using shortest paths
+    for i in range(1, len(tables_list)):
+        target = tables_list[i]
+        if target in connected_tables:
+            continue
+            
+        best_path = None
+        for start in connected_tables:
+            path = find_join_path(graph, start, target)
+            if path and (best_path is None or len(path) < len(best_path)):
+                best_path = path
+                
+        if best_path:
+            for edge in best_path:
+                add_edge_if_new(edge)
+                connected_tables.add(edge["table"])
+        else:
+            connected_tables.add(target)
+            
+    # 2. Expand outwards by 2 hops to provide neighboring context (to catch implicitly referenced tables like 'rented')
+    expanded_tables = set(connected_tables)
+    from collections import deque
+    queue = deque([(t, 0) for t in connected_tables])
+    
+    while queue:
+        current, depth = queue.popleft()
+        if depth >= 2:  # max_depth = 2
+            continue
+            
+        for edge in graph.get(current, []):
+            nxt = edge["table"]
+            add_edge_if_new(edge)
+            
+            if nxt not in expanded_tables:
+                expanded_tables.add(nxt)
+                queue.append((nxt, depth + 1))
+                
+    return expanded_tables, all_path_edges
 
 def build_context(
     question: str,
@@ -132,13 +211,23 @@ def build_context(
     scored_tables.sort(key=lambda x: x[0], reverse=True)
     initial_names = {name for score, name in scored_tables[:max_tables] if score > 0}
 
-    # 2. Expand via FKs (Multi-hop)
-    all_table_names = expand_foreign_key_tables(initial_names, schema)
+    # 2. Build graph and find paths connecting initial tables
+    graph = build_schema_graph(schema)
+    all_table_names, path_edges = get_tables_in_paths(graph, initial_names)
+    
     selected_table_metas = [t for t in schema.tables if t.table in all_table_names]
 
     context_tables: List[str] = []
     context_columns: Dict[str, List[str]] = {}
     context_joins: List[str] = []
+    
+    # Extract structural join paths format
+    for edge in path_edges:
+        # Avoid duplicate join statements
+        join_str = f"{edge['from_table']} -> {edge['table']} (ON {edge['from_table']}.{edge['from_col']} = {edge['table']}.{edge['to_col']})"
+        reverse_join_str = f"{edge['table']} -> {edge['from_table']} (ON {edge['table']}.{edge['to_col']} = {edge['from_table']}.{edge['from_col']})"
+        if join_str not in context_joins and reverse_join_str not in context_joins:
+            context_joins.append(join_str)
 
     # 3. Select columns per table
     for table in selected_table_metas:
@@ -176,13 +265,21 @@ def build_context(
         context_tables.append(table.table)
         context_columns[table.table] = chosen_cols
 
-    # 4. Infer joins
+    # 4. We already inferred joining paths from the graph.
+    # Optional: we can add any direct 1-hop FKs between the final set of tables 
+    # to give the LLM full visibility into relationships within the context bubble.
     for t_meta in selected_table_metas:
         for col in t_meta.columns:
             if col.foreign_key:
-                target_table = col.foreign_key.split(".")[0]
-                if target_table in context_tables and t_meta.table in context_tables:
-                    context_joins.append(f"{t_meta.table}.{col.name} -> {col.foreign_key}")
+                parts = col.foreign_key.split(".")
+                if len(parts) >= 2:
+                    target_table = parts[-2]
+                    target_col = parts[-1]
+                    if target_table in context_tables and t_meta.table in context_tables:
+                        join_str = f"{t_meta.table} -> {target_table} (ON {t_meta.table}.{col.name} = {target_table}.{target_col})"
+                        reverse_join_str = f"{target_table} -> {t_meta.table} (ON {target_table}.{target_col} = {t_meta.table}.{col.name})"
+                        if join_str not in context_joins and reverse_join_str not in context_joins:
+                            context_joins.append(join_str)
 
     return {
         "tables": context_tables,

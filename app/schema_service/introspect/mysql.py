@@ -1,5 +1,8 @@
 import pymysql
+import logging
 from app.schema_service.models import ColumnMeta, TableMeta
+
+logger = logging.getLogger(__name__)
 
 def introspect_mysql(conn):
     connection = pymysql.connect(
@@ -13,21 +16,27 @@ def introspect_mysql(conn):
     
     try:
         with connection.cursor() as cursor:
+            # Use DATABASE() to get the current schema name if conn.database is subtly different (case-sensitivity)
+            cursor.execute("SELECT DATABASE()")
+            current_db = cursor.fetchone()['DATABASE()']
+            logger.info(f"Introspecting MySQL database: {current_db} (Requested: {conn.database})")
+
             cursor.execute("""
                 SELECT 
                     TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA
                 FROM information_schema.COLUMNS
-                WHERE TABLE_SCHEMA = %s
+                WHERE TABLE_SCHEMA = %s OR TABLE_SCHEMA = %s
                 ORDER BY TABLE_NAME, ORDINAL_POSITION
-            """, (conn.database,))
+            """, (current_db, conn.database))
             columns = cursor.fetchall()
+            logger.info(f"Found {len(columns)} columns in information_schema.COLUMNS")
             
             cursor.execute("""
                 SELECT
                     TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
                 FROM information_schema.KEY_COLUMN_USAGE
-                WHERE TABLE_SCHEMA = %s AND REFERENCED_TABLE_NAME IS NOT NULL
-            """, (conn.database,))
+                WHERE (TABLE_SCHEMA = %s OR TABLE_SCHEMA = %s) AND REFERENCED_TABLE_NAME IS NOT NULL
+            """, (current_db, conn.database))
             fks = cursor.fetchall()
             fk_map = {
                 (f['TABLE_NAME'], f['COLUMN_NAME']): f"{f['REFERENCED_TABLE_SCHEMA']}.{f['REFERENCED_TABLE_NAME']}.{f['REFERENCED_COLUMN_NAME']}"

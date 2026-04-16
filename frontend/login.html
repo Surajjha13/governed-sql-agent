@@ -4,20 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign In | SQL Agent</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="shortcut icon" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #f8fafc;
+            --bg: #f0f3fb;
             --surface: #ffffff;
             --text: #0f172a;
             --text-muted: #64748b;
             --brand: #6366f1;
             --brand-hover: #4f46e5;
             --border: #e2e8f0;
-            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-            --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.08), 0 2px 6px -2px rgb(0 0 0 / 0.06);
+            --shadow-xl: 0 24px 48px -8px rgb(0 0 0 / 0.14), 0 8px 16px -6px rgb(0 0 0 / 0.08);
         }
 
         * {
@@ -29,6 +32,10 @@
         body {
             font-family: 'Inter', sans-serif;
             background-color: var(--bg);
+            background-image:
+                radial-gradient(ellipse at 0% 0%, rgba(99,102,241,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 100% 100%, rgba(56,189,248,0.07) 0%, transparent 50%);
+            background-attachment: fixed;
             color: var(--text);
             min-height: 100vh;
             display: flex;
@@ -44,18 +51,29 @@
         /* Nav link back */
         .back-link {
             position: absolute;
-            top: 40px;
-            left: 40px;
+            top: 32px;
+            left: 32px;
             text-decoration: none;
             color: var(--text-muted);
-            font-weight: 600;
+            font-weight: 700;
             display: flex;
             align-items: center;
-            gap: 8px;
-            transition: color 0.2s;
+            gap: 10px;
+            transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+            font-size: 0.85rem;
+            letter-spacing: -0.01em;
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.4);
+            border: 1px solid rgba(226,232,240,0.5);
+            border-radius: 99px;
+            z-index: 10;
         }
         .back-link:hover {
             color: var(--brand);
+            background: rgba(255,255,255,0.8);
+            transform: translateX(-4px);
+            border-color: rgba(99,102,241,0.3);
+            box-shadow: 0 4px 12px rgba(15,23,42,0.05);
         }
 
         .login-container {
@@ -70,37 +88,94 @@
 
         .logo {
             display: inline-flex;
+            flex-direction: column;
             align-items: center;
-            gap: 12px;
+            gap: 16px;
             text-decoration: none;
             color: var(--text);
             font-weight: 800;
-            font-size: 1.5rem;
-            margin-bottom: 16px;
+            margin-bottom: 24px;
         }
 
         .logo-box {
-            width: 42px;
-            height: 42px;
-            background: var(--brand);
-            border-radius: 12px;
-            display: grid;
-            place-items: center;
+            width: 72px;
+            height: 72px;
+            background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(129,140,248,0.15));
+            border: 1px solid rgba(99,102,241,0.16);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 24px rgba(99,102,241,0.12);
+            animation: logo-float 4s ease-in-out infinite alternate;
+        }
+
+        @keyframes logo-float {
+            from { transform: translateY(0) scale(1); }
+            to { transform: translateY(-8px) scale(1.05); }
+        }
+
+        .logo-box img {
+            width: 44px;
+            height: 44px;
+            object-fit: contain;
+        }
+
+        .logo-text {
+            font-size: 1.75rem;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            letter-spacing: -0.04em;
+            background: linear-gradient(135deg, #0f172a, #334155);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-badge {
+            font-size: 0.65rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            background: linear-gradient(135deg, #818cf8, #6366f1);
             color: white;
-            font-size: 1.25rem;
+            -webkit-text-fill-color: white;
+            background-clip: border-box;
+            -webkit-background-clip: border-box;
+            border-radius: 999px;
+            vertical-align: middle;
+            margin-left: 8px;
+            box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+            display: inline-block;
+            line-height: 1;
         }
 
         .logo-header p {
             color: var(--text-muted);
-            font-size: 1.05rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            max-width: 280px;
+            margin: 0 auto;
+            line-height: 1.5;
         }
 
         .login-card {
-            background: white;
-            border-radius: 24px;
-            padding: 40px;
-            box-shadow: var(--shadow-xl);
-            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.7);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: 28px;
+            padding: 48px 40px;
+            box-shadow:
+                0 32px 64px -16px rgba(15,23,42,0.12),
+                0 0 0 1px rgba(255,255,255,0.7),
+                inset 0 1px 1px rgba(255,255,255,1);
+            border: 1px solid rgba(226,232,240,0.5);
+            animation: card-appear 0.6s cubic-bezier(0.34,1.56,0.64,1) both;
+        }
+
+        @keyframes card-appear {
+            from { opacity: 0; transform: translateY(30px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
         }
 
         .form-group {
@@ -130,7 +205,7 @@
             outline: none;
             border-color: var(--brand);
             background: white;
-            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
         }
 
         .btn {
@@ -150,15 +225,18 @@
         }
 
         .btn-primary {
-            background: var(--brand);
+            background: linear-gradient(135deg, #818cf8, #6366f1 60%, #4f46e5);
             color: white;
-            box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39);
+            box-shadow:
+                0 4px 14px 0 rgba(99, 102, 241, 0.38),
+                inset 0 1px 0 rgba(255,255,255,0.2);
         }
 
         .btn-primary:hover {
-            background: var(--brand-hover);
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.5);
+            box-shadow:
+                0 8px 22px 0 rgba(99, 102, 241, 0.48),
+                inset 0 1px 0 rgba(255,255,255,0.2);
         }
 
         .error-message {
@@ -204,27 +282,37 @@
 
         .ambient-blob {
             position: absolute;
-            filter: blur(80px);
-            opacity: 0.5;
+            filter: blur(100px);
+            opacity: 0.6;
             border-radius: 50%;
-            animation: float 20s infinite ease-in-out alternate;
+            animation: float 22s infinite ease-in-out alternate;
         }
 
         .blob-1 {
-            top: -10%;
-            left: -10%;
-            width: 50vw;
-            height: 50vw;
-            background: rgba(99, 102, 241, 0.15);
+            top: -15%;
+            left: -15%;
+            width: 55vw;
+            height: 55vw;
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.22), rgba(129,140,248,0.08) 70%);
         }
 
         .blob-2 {
-            bottom: -20%;
-            right: -10%;
-            width: 60vw;
-            height: 60vw;
-            background: rgba(56, 189, 248, 0.1);
-            animation-delay: -5s;
+            bottom: -25%;
+            right: -15%;
+            width: 65vw;
+            height: 65vw;
+            background: radial-gradient(circle, rgba(56, 189, 248, 0.16), rgba(34,211,238,0.04) 70%);
+            animation-delay: -8s;
+        }
+
+        .blob-3 {
+            top: 40%;
+            left: 40%;
+            width: 30vw;
+            height: 30vw;
+            background: radial-gradient(circle, rgba(168, 85, 247, 0.1), transparent 70%);
+            animation-delay: -12s;
+            animation-duration: 18s;
         }
 
         @keyframes float {
@@ -244,6 +332,7 @@
     <div class="ambient-bg">
         <div class="ambient-blob blob-1"></div>
         <div class="ambient-blob blob-2"></div>
+        <div class="ambient-blob blob-3"></div>
     </div>
 
     <a href="landing.html" class="back-link">
@@ -253,10 +342,12 @@
     <div class="login-container">
         <div class="logo-header">
             <div class="logo">
-                <div class="logo-box">A</div>
-                SQL Agent
+                <div class="logo-box">
+                    <img src="https://img.icons8.com/isometric/96/database.png" alt="DB" />
+                </div>
+                <div class="logo-text">Data Agent<span class="logo-badge">Enterprise</span></div>
             </div>
-            <p>Sign in to your enterprise workspace</p>
+            <p>Access your database insights with secure enterprise-grade AI</p>
         </div>
 
         <div class="login-card">
@@ -284,7 +375,6 @@
         </div>
     </div>
 
-    <script src="/js/auth.js?v=login"></script>
     <script>
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -313,16 +403,21 @@
 
                 const data = await res.json();
                 
-                // Store authentication token
-                localStorage.setItem('sql_agent_token', data.token);
-                localStorage.setItem('sql_agent_user', JSON.stringify({
+                const authUser = {
+                    id: data.user.id,
                     username: data.user.username,
                     role: data.user.role,
-                    role_label: data.role_label
-                }));
+                    enterprise_id: data.user.enterprise_id,
+                    owner_admin_id: data.user.owner_admin_id,
+                    role_label: data.role_label,
+                    token: data.token
+                };
+                sessionStorage.setItem('sql_agent_user', JSON.stringify(authUser));
+                localStorage.removeItem('sql_agent_user');
+                sessionStorage.removeItem('sql_agent_session_id');
 
                 // Redirect based on role
-                if (data.user.role === 'SYSTEM_ADMIN') {
+                if (data.user.role === 'SUPER_ADMIN' || data.user.role === 'SYSTEM_ADMIN') {
                     window.location.href = '/admin.html';
                 } else {
                     window.location.href = '/workspace';

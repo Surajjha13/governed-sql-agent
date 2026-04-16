@@ -3,20 +3,51 @@ import secrets
 import json
 import logging
 import os
+import base64
+import datetime
+import uuid
+import jwt
 from typing import List, Optional, Dict, Any
+from sqlalchemy import or_
+
+try:
+    from cryptography.fernet import Fernet
+    _raw_key = os.getenv("MASTER_KEY") or os.getenv("MASTER_ENCRYPTION_KEY") or "insecure_default"
+    MASTER_KEY_JWT = _raw_key
+    if not _raw_key or _raw_key == "insecure_default_key_must_change":
+        raise RuntimeError(
+            "Missing encryption key. Set MASTER_KEY or MASTER_ENCRYPTION_KEY before starting the application."
+        )
+    _key_32 = _raw_key.ljust(32, '0')[:32].encode('utf-8')
+    FERNET_KEY = base64.urlsafe_b64encode(_key_32)
+    cipher_suite = Fernet(FERNET_KEY)
+
+    def encrypt_data(data: str) -> str:
+        return cipher_suite.encrypt(data.encode('utf-8')).decode('utf-8')
+
+    def decrypt_data(data: str) -> str:
+        try:
+            return cipher_suite.decrypt(data.encode('utf-8')).decode('utf-8')
+        except Exception:
+            return data  # Fallback for unencrypted legacy rows
+except ImportError as exc:
+    raise RuntimeError(
+        "The 'cryptography' package is required for secrets encryption. Install dependencies before starting the application."
+    ) from exc
 from app.auth.database import SessionLocal, engine, Base
 from app.auth.models import (
+    AuthSessionModel,
     UserModel,
     RoleModel,
+    EnterpriseModel,
     AuditLogModel,
     ChatHistoryModel,
     ObservabilityEventModel,
     AdminActionLogModel,
     SecurityEventModel,
 )
-import datetime
-
 logger = logging.getLogger(__name__)
+TOKEN_TTL_DAYS = int(os.getenv("AUTH_TOKEN_TTL_DAYS", "7"))
 OBSERVABILITY_LOOKBACK_LIMIT = int(os.getenv("OBSERVABILITY_LOOKBACK_LIMIT", "500"))
 OBSERVABILITY_ALERT_WINDOW_MINUTES = int(os.getenv("OBSERVABILITY_ALERT_WINDOW_MINUTES", "15"))
 OBSERVABILITY_THRESHOLD_SQL_GEN_MS = float(os.getenv("OBSERVABILITY_THRESHOLD_SQL_GEN_MS", "6000"))
@@ -30,12 +61,16 @@ OBSERVABILITY_ALERT_LOGIN_FAILURE_COUNT = int(os.getenv("OBSERVABILITY_ALERT_LOG
 OBSERVABILITY_ALERT_POLICY_DENIAL_COUNT = int(os.getenv("OBSERVABILITY_ALERT_POLICY_DENIAL_COUNT", "3"))
 
 class User:
-    def __init__(self, username, password_hash, salt, role, token=None, llm_config=None, last_connection=None):
+    def __init__(self, username, password_hash, salt, role, id=None, enterprise_id=None, owner_admin_id=None, token=None, token_expires_at=None, llm_config=None, last_connection=None):
+        self.id = id
         self.username = username
         self.password_hash = password_hash
         self.salt = salt
         self.role = role
+        self.enterprise_id = enterprise_id
+        self.owner_admin_id = owner_admin_id
         self.token = token
+        self.token_expires_at = token_expires_at
         self.llm_config = llm_config
         self.last_connection = last_connection
 
@@ -48,12 +83,127 @@ class UserManager:
     def _ensure_admin(self):
         db = SessionLocal()
         try:
+            from sqlalchemy import text
+
+            # Run schema migrations before any ORM query touches newly added columns.
+            # SKIP for PostgreSQL/Supabase as the schema is already managed by metadata.create_all()
+            # and PG is strict about transaction aborts on failed ALTER TABLE.
+            is_postgres = "postgresql" in str(engine.url).lower()
+            
+            if not is_postgres:
+                migration_steps = [
+                    (
+                        "ALTER TABLE chat_history ADD COLUMN visualization_json TEXT;",
+                        ("duplicate column name", "already exists"),
+                        "Migrated chat_history to include visualization_json column",
+                        "Chat history migration error",
+                    ),
+                    (
+                        "ALTER TABLE users ADD COLUMN token_expires_at TEXT;",
+                        ("duplicate column name", "already exists"),
+                        "Migrated users to include token_expires_at column",
+                        "Users table migration error",
+                    ),
+                    (
+                        "ALTER TABLE users ADD COLUMN enterprise_id INTEGER;",
+                        ("duplicate column name", "already exists"),
+                        "Migrated users to include enterprise_id column",
+                        "Column error",
+                    ),
+                    (
+                        "ALTER TABLE users ADD COLUMN owner_admin_id INTEGER;",
+                        ("duplicate column name", "already exists"),
+                        "Migrated users to include owner_admin_id column",
+                        "Column error",
+                    ),
+                    (
+                        "ALTER TABLE users ADD COLUMN created_by_id INTEGER;",
+                        ("duplicate column name", "already exists"),
+                        "Migrated users to include created_by_id column",
+                        "Column error",
+                    ),
+                    (
+                        "ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT 1;",
+                        ("duplicate column name", "already exists"),
+                        "Migrated users to include is_active column",
+                        "Column error",
+                    ),
+                ]
+                
+                # Add multi-tenant columns to all log tables
+                log_tables = ["audit_logs", "chat_history", "observability_events", "admin_action_logs", "security_events"]
+                for table in log_tables:
+                    migration_steps.append((
+                        f"ALTER TABLE {table} ADD COLUMN enterprise_id INTEGER;",
+                        ("duplicate column name", "already exists"),
+                        f"Migrated {table} to include enterprise_id", "Column error"
+                    ))
+                for migration_sql, duplicate_markers, success_message, error_prefix in migration_steps:
+                    try:
+                        db.execute(text(migration_sql))
+                        db.commit()
+                        logger.info(success_message)
+                    except Exception as e:
+                        db.rollback()
+                        if any(marker in str(e).lower() for marker in duplicate_markers):
+                            pass
+                        else:
+                            logger.warning(f"Note: {error_prefix}: {e}")
+            else:
+                logger.info("Supabase (PostgreSQL) detected: Core tables managed by metadata; checking for incremental columns.")
+
+            # Universal migrations (Run on both SQLite and PostgreSQL)
+            universal_migrations = [
+                (
+                    "ALTER TABLE chat_history ADD COLUMN request_id TEXT;",
+                    ("duplicate column name", "already exists"),
+                    "Migrated chat_history to include request_id",
+                    "Chat history request_id migration error"
+                ),
+                (
+                    "ALTER TABLE observability_events ADD COLUMN request_id TEXT;",
+                    ("duplicate column name", "already exists"),
+                    "Migrated observability_events to include request_id",
+                    "Observability request_id migration error"
+                ),
+                (
+                    "ALTER TABLE observability_events ADD COLUMN question TEXT;",
+                    ("duplicate column name", "already exists"),
+                    "Migrated observability_events to include question",
+                    "Observability question migration error"
+                ),
+                (
+                    "ALTER TABLE observability_events ADD COLUMN sql_query TEXT;",
+                    ("duplicate column name", "already exists"),
+                    "Migrated observability_events to include sql_query",
+                    "Observability sql_query migration error"
+                ),
+                (
+                    "ALTER TABLE observability_events ADD COLUMN error_message TEXT;",
+                    ("duplicate column name", "already exists"),
+                    "Migrated observability_events to include error_message",
+                    "Observability error_message migration error"
+                ),
+            ]
+            for migration_sql, duplicate_markers, success_message, error_prefix in universal_migrations:
+                try:
+                    db.execute(text(migration_sql))
+                    db.commit()
+                    logger.info(success_message)
+                except Exception as e:
+                    db.rollback()
+                    if any(marker in str(e).lower() for marker in duplicate_markers):
+                        pass
+                    else:
+                        logger.warning(f"Note: {error_prefix}: {e}")
+
             # Only seed default roles on a FRESH INSTALL (no roles at all).
             # This way, if an admin deletes a role it stays deleted across restarts.
             role_count = db.query(RoleModel).count()
             if role_count == 0:
                 default_roles = [
-                    ("SYSTEM_ADMIN", "Full access to all system features"),
+                    ("SUPER_ADMIN", "Global system oversight across all enterprises"),
+                    ("SYSTEM_ADMIN", "Full access to enterprise-level features"),
                     ("DATA_SCIENTIST", "Advanced query capabilities and schema insights"),
                     ("ANALYST", "Can query data and create dashboards"),
                     ("MANAGER", "Trusted analyst with team oversight"),
@@ -70,24 +220,13 @@ class UserManager:
 
             admin = db.query(UserModel).filter(UserModel.username == "admin").first()
             if not admin:
-                logger.info("Initializing default admin user")
-                self.create_user("admin", "admin123", "SYSTEM_ADMIN")
-
-            # SCHEMA MIGRATION: Ensure visualization_json column exists in chat_history
-            try:
-                # Use a raw connection to check and add column if missing
-                raw_conn = db.connection()
-                # SQLite specific check
-                from sqlalchemy import text
-                db.execute(text("ALTER TABLE chat_history ADD COLUMN visualization_json TEXT;"))
-                db.commit()
-                logger.info("Migrated chat_history to include visualization_json column")
-            except Exception as e:
-                # Silently catch "duplicate column" error
-                if "duplicate column name" in str(e).lower() or "already exists" in str(e).lower():
-                    pass
-                else:
-                    logger.warning(f"Note: Chat history migration error: {e}")
+                bootstrap_password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD")
+                if not bootstrap_password:
+                    raise RuntimeError(
+                        "Missing bootstrap admin credentials. Set BOOTSTRAP_ADMIN_PASSWORD for first-time startup."
+                    )
+                logger.info("Initializing bootstrap admin user from BOOTSTRAP_ADMIN_PASSWORD")
+                self.create_user("admin", bootstrap_password, "SUPER_ADMIN")
         finally:
             db.close()
 
@@ -135,7 +274,7 @@ class UserManager:
         except Exception:
             return json.dumps({"raw": str(payload)})
 
-    def create_user(self, username: str, password: str, role: str) -> bool:
+    def create_user(self, username: str, password: str, role: str, enterprise_id: Optional[int] = None, owner_admin_id: Optional[int] = None, created_by_id: Optional[int] = None) -> bool:
         db = SessionLocal()
         try:
             if db.query(UserModel).filter(UserModel.username == username).first():
@@ -146,7 +285,11 @@ class UserManager:
                 username=username,
                 password_hash=password_hash,
                 salt=salt,
-                role=role
+                role=role,
+                enterprise_id=enterprise_id,
+                owner_admin_id=owner_admin_id,
+                created_by_id=created_by_id,
+                is_active=True
             )
             db.add(new_user)
             db.commit()
@@ -154,23 +297,65 @@ class UserManager:
         finally:
             db.close()
 
-    def authenticate(self, username: str, password: str) -> Optional[User]:
+    def _is_enterprise_active(self, db, enterprise_id: Optional[int]) -> bool:
+        if enterprise_id is None:
+            return True
+        enterprise = db.query(EnterpriseModel).filter(EnterpriseModel.id == enterprise_id).first()
+        return bool(enterprise and enterprise.is_active)
+
+    def _is_user_enterprise_allowed(self, db, db_user: UserModel) -> bool:
+        if db_user.role == "SUPER_ADMIN":
+            return True
+        return self._is_enterprise_active(db, db_user.enterprise_id)
+
+    def authenticate(self, username: str, password: str, device_label: Optional[str] = None) -> Optional[User]:
         db = SessionLocal()
         try:
-            db_user = db.query(UserModel).filter(UserModel.username == username).first()
+            db_user = db.query(UserModel).filter(UserModel.username == username, UserModel.is_active == True).first()
             if not db_user:
                 return None
+            if not self._is_user_enterprise_allowed(db, db_user):
+                return None
             if self._hash_password(password, db_user.salt) == db_user.password_hash:
-                token = secrets.token_hex(32)
-                db_user.token = token
+                now = datetime.datetime.utcnow()
+                expires = now + datetime.timedelta(days=TOKEN_TTL_DAYS)
+                jti = str(uuid.uuid4())
+                payload = {
+                    "id": db_user.id,
+                    "username": db_user.username,
+                    "role": db_user.role,
+                    "enterprise_id": db_user.enterprise_id,
+                    "owner_admin_id": db_user.owner_admin_id,
+                    "jti": jti,
+                    "exp": expires
+                }
+                token = jwt.encode(payload, MASTER_KEY_JWT, algorithm="HS256")
+
+                # Insert a per-session record — does NOT touch users.token
+                session_row = AuthSessionModel(
+                    user_id=db_user.id,
+                    jti=jti,
+                    token_hash=hashlib.sha256(token.encode()).hexdigest(),
+                    created_at=now.isoformat(),
+                    expires_at=expires.isoformat(),
+                    device_label=device_label,
+                    enterprise_id=db_user.enterprise_id,
+                    owner_admin_id=db_user.owner_admin_id,
+                )
+                db.add(session_row)
                 db.commit()
+
                 return User(
+                    id=db_user.id,
                     username=db_user.username,
                     password_hash=db_user.password_hash,
                     salt=db_user.salt,
                     role=db_user.role,
+                    enterprise_id=db_user.enterprise_id,
+                    owner_admin_id=db_user.owner_admin_id,
                     token=token,
-                    llm_config=db_user.llm_config,
+                    token_expires_at=expires.isoformat(),
+                    llm_config=decrypt_data(db_user.llm_config) if db_user.llm_config else None,
                     last_connection=db_user.last_connection_json
                 )
             return None
@@ -187,60 +372,383 @@ class UserManager:
         )
 
     def get_user_by_token(self, token: str) -> Optional[User]:
+        try:
+            payload = jwt.decode(token, MASTER_KEY_JWT, algorithms=["HS256"])
+            db = SessionLocal()
+            try:
+                # --- Per-session revocation check ---
+                # Tokens issued after this migration carry a `jti` claim.
+                # Tokens issued before (no jti) are still accepted for
+                # backward compatibility until they expire naturally.
+                jti = payload.get("jti")
+                if jti:
+                    session = db.query(AuthSessionModel).filter(
+                        AuthSessionModel.jti == jti,
+                        AuthSessionModel.revoked_at.is_(None)
+                    ).first()
+                    if not session:
+                        return None  # session was explicitly revoked
+
+                db_user = db.query(UserModel).filter(
+                    UserModel.id == payload["id"],
+                    UserModel.is_active == True
+                ).first()
+                if not db_user:
+                    return None
+                if not self._is_user_enterprise_allowed(db, db_user):
+                    return None
+                return User(
+                    id=db_user.id,
+                    username=db_user.username,
+                    password_hash=db_user.password_hash,
+                    salt=db_user.salt,
+                    role=db_user.role,
+                    enterprise_id=db_user.enterprise_id,
+                    owner_admin_id=db_user.owner_admin_id,
+                    token=token,
+                    token_expires_at=db_user.token_expires_at,
+                    llm_config=decrypt_data(db_user.llm_config) if db_user.llm_config else None,
+                    last_connection=db_user.last_connection_json
+                )
+            finally:
+                db.close()
+        except jwt.ExpiredSignatureError:
+            return None
+        except jwt.InvalidTokenError:
+            return None
+        except Exception:
+            return None
+
+    def logout(self, token: str) -> bool:
+        """Revoke the *specific* session identified by this token's jti claim.
+        Sibling sessions for the same user are completely unaffected.
+        """
+        try:
+            # Decode without verifying expiry — we want to revoke even if the
+            # token is already expired, so it can't be reused if expiry clocks drift.
+            payload = jwt.decode(
+                token, MASTER_KEY_JWT, algorithms=["HS256"],
+                options={"verify_exp": False}
+            )
+            jti = payload.get("jti")
+        except Exception:
+            return False
+
+        if not jti:
+            # Legacy token (no jti) — nothing to revoke in the new table.
+            return True
+
         db = SessionLocal()
         try:
-            db_user = db.query(UserModel).filter(UserModel.token == token).first()
-            if not db_user:
-                return None
-            return User(
-                username=db_user.username,
-                password_hash=db_user.password_hash,
-                salt=db_user.salt,
-                role=db_user.role,
-                token=db_user.token,
-                llm_config=db_user.llm_config,
-                last_connection=db_user.last_connection_json
-            )
+            session = db.query(AuthSessionModel).filter(
+                AuthSessionModel.jti == jti
+            ).first()
+            if session:
+                session.revoked_at = datetime.datetime.utcnow().isoformat()
+                db.commit()
+            return True
         finally:
             db.close()
 
-    def logout(self, username: str) -> bool:
+    def revoke_session_by_jti(self, jti: str, requesting_user_id: int) -> bool:
+        """Revoke an arbitrary session by its jti, scoped to the requesting user."""
         db = SessionLocal()
         try:
-            user = db.query(UserModel).filter(UserModel.username == username).first()
-            if not user:
+            session = db.query(AuthSessionModel).filter(
+                AuthSessionModel.jti == jti,
+                AuthSessionModel.user_id == requesting_user_id,
+                AuthSessionModel.revoked_at.is_(None)
+            ).first()
+            if not session:
                 return False
-            user.token = None
-            user.last_connection_json = None
+            session.revoked_at = datetime.datetime.utcnow().isoformat()
             db.commit()
             return True
         finally:
             db.close()
 
-    def list_users(self) -> List[Dict]:
+    def revoke_all_other_sessions(self, current_jti: str, user_id: int) -> int:
+        """Revoke every active session for this user except the caller's own."""
         db = SessionLocal()
         try:
-            users = db.query(UserModel).all()
-            return [{"username": u.username, "role": u.role} for u in users]
+            sessions = db.query(AuthSessionModel).filter(
+                AuthSessionModel.user_id == user_id,
+                AuthSessionModel.jti != current_jti,
+                AuthSessionModel.revoked_at.is_(None)
+            ).all()
+            now = datetime.datetime.utcnow().isoformat()
+            for s in sessions:
+                s.revoked_at = now
+            db.commit()
+            return len(sessions)
         finally:
             db.close()
 
-    def delete_user(self, username: str) -> bool:
+    def list_sessions(self, user_id: int) -> List[Dict]:
+        """Return all non-expired, non-revoked sessions for a user."""
         db = SessionLocal()
         try:
-            user = db.query(UserModel).filter(UserModel.username == username).first()
+            now_iso = datetime.datetime.utcnow().isoformat()
+            sessions = db.query(AuthSessionModel).filter(
+                AuthSessionModel.user_id == user_id,
+                AuthSessionModel.revoked_at.is_(None),
+                AuthSessionModel.expires_at > now_iso
+            ).order_by(AuthSessionModel.created_at.desc()).all()
+            return [
+                {
+                    "jti": s.jti,
+                    "created_at": s.created_at,
+                    "expires_at": s.expires_at,
+                    "last_seen_at": s.last_seen_at,
+                    "device_label": s.device_label,
+                }
+                for s in sessions
+            ]
+        finally:
+            db.close()
+
+    def list_users(self, current_user: Optional[User] = None) -> List[Dict]:
+        db = SessionLocal()
+        try:
+            query = db.query(UserModel).filter(UserModel.is_active == True)
+            if current_user:
+                if current_user.role == "SUPER_ADMIN":
+                    # Super admins should see top-level accounts they manage directly,
+                    # not every nested enterprise-owned user created by downstream admins.
+                    from sqlalchemy import or_
+                    query = query.filter(
+                        or_(
+                            UserModel.owner_admin_id.is_(None),
+                            UserModel.created_by_id == current_user.id,
+                        )
+                    )
+                else:
+                    query = self.apply_scope(query, current_user, UserModel)
+            users = query.all()
+            return [{"username": u.username, "role": u.role, "enterprise_id": u.enterprise_id, "owner_admin_id": u.owner_admin_id} for u in users]
+        finally:
+            db.close()
+
+    def apply_scope(self, query, current_user: User, model_class):
+        """Centralized scope engine to enforce isolation."""
+        if current_user.role == "SUPER_ADMIN":
+            return query
+        
+        if current_user.role == "SYSTEM_ADMIN":
+            scoped_filters = []
+            if hasattr(model_class, "owner_admin_id"):
+                scoped_filters.append(model_class.owner_admin_id == current_user.id)
+            if hasattr(model_class, "username"):
+                scoped_filters.append(model_class.username == current_user.username)
+            if hasattr(model_class, "admin_username"):
+                scoped_filters.append(model_class.admin_username == current_user.username)
+            if hasattr(model_class, "user_id"):
+                scoped_filters.append(model_class.user_id == current_user.id)
+
+            if not scoped_filters or not hasattr(model_class, "enterprise_id"):
+                return query.filter(False)
+
+            return query.filter(
+                model_class.enterprise_id == current_user.enterprise_id,
+                or_(*scoped_filters)
+            )
+        
+        # Regular users only see their own data
+        if hasattr(model_class, "user_id"):
+            return query.filter(model_class.user_id == current_user.id)
+        if hasattr(model_class, "username"):
+            return query.filter(model_class.username == current_user.username)
+        return query.filter(False) # Default deny
+
+    def apply_personal_scope(self, query, current_user: User, model_class):
+        """Always filter to the current user's own records only, regardless of role.
+        Used for chat history where every user (including admins) should only see their own."""
+        if hasattr(model_class, "username"):
+            return query.filter(model_class.username == current_user.username)
+        if hasattr(model_class, "user_id"):
+            return query.filter(model_class.user_id == current_user.id)
+        return query.filter(False)
+
+    # ── Enterprise Management (Super Admin) ─────────────────────────────
+    def create_enterprise(self, name: str, super_admin_id: int) -> Optional[int]:
+        db = SessionLocal()
+        try:
+            if db.query(EnterpriseModel).filter(EnterpriseModel.name == name).first():
+                return None
+            new_ent = EnterpriseModel(
+                name=name,
+                created_by_id=super_admin_id,
+                status="active",
+                is_active=True,
+                created_at=datetime.datetime.now().isoformat()
+            )
+            db.add(new_ent)
+            db.commit()
+            return new_ent.id
+        finally:
+            db.close()
+
+    def update_enterprise_status(self, enterprise_id: int, is_active: bool) -> bool:
+        db = SessionLocal()
+        try:
+            ent = db.query(EnterpriseModel).filter(EnterpriseModel.id == enterprise_id).first()
+            if not ent:
+                return False
+            ent.is_active = is_active
+            ent.status = "active" if is_active else "inactive"
+            db.commit()
+            return True
+        finally:
+            db.close()
+
+    def delete_enterprise(self, enterprise_id: int) -> Optional[Dict[str, Any]]:
+        db = SessionLocal()
+        try:
+            ent = db.query(EnterpriseModel).filter(EnterpriseModel.id == enterprise_id).first()
+            if not ent:
+                return None
+            enterprise_name = ent.name
+
+            users = db.query(UserModel).filter(UserModel.enterprise_id == enterprise_id).all()
+            usernames = [user.username for user in users]
+            user_ids = [user.id for user in users]
+            admin_count = sum(1 for user in users if user.role == "SYSTEM_ADMIN")
+            user_count = len(users)
+
+            if user_ids:
+                db.query(AuthSessionModel).filter(AuthSessionModel.user_id.in_(user_ids)).delete(synchronize_session=False)
+            if usernames:
+                db.query(ChatHistoryModel).filter(ChatHistoryModel.username.in_(usernames)).delete(synchronize_session=False)
+
+            if user_ids:
+                db.query(UserModel).filter(UserModel.enterprise_id == enterprise_id).delete(synchronize_session=False)
+
+            db.query(EnterpriseModel).filter(EnterpriseModel.id == enterprise_id).delete(synchronize_session=False)
+            db.commit()
+        finally:
+            db.close()
+
+        if usernames:
+            self._remove_users_from_rbac(usernames)
+
+        return {
+            "enterprise_id": enterprise_id,
+            "enterprise_name": enterprise_name,
+            "deleted_users": user_count,
+            "deleted_admins": admin_count,
+        }
+
+    def list_enterprises(self) -> List[Dict]:
+        db = SessionLocal()
+        try:
+            from sqlalchemy import case, func
+
+            counts = {
+                row.enterprise_id: {
+                    "total_users": row.total_users or 0,
+                    "admin_count": row.admin_count or 0,
+                    "employee_count": row.employee_count or 0,
+                    "managed_user_count": row.managed_user_count or 0,
+                }
+                for row in db.query(
+                    UserModel.enterprise_id.label("enterprise_id"),
+                    func.count(UserModel.id).label("total_users"),
+                    func.sum(case((UserModel.role == "SYSTEM_ADMIN", 1), else_=0)).label("admin_count"),
+                    func.sum(case((UserModel.role != "SYSTEM_ADMIN", 1), else_=0)).label("employee_count"),
+                    func.sum(case((UserModel.owner_admin_id.isnot(None), 1), else_=0)).label("managed_user_count"),
+                )
+                .filter(UserModel.enterprise_id.isnot(None))
+                .group_by(UserModel.enterprise_id)
+                .all()
+            }
+
+            ents = db.query(EnterpriseModel).all()
+            return [
+                {
+                    "id": e.id,
+                    "name": e.name,
+                    "status": e.status,
+                    "is_active": e.is_active,
+                    "created_at": e.created_at,
+                    "total_users": counts.get(e.id, {}).get("total_users", 0),
+                    "admin_count": counts.get(e.id, {}).get("admin_count", 0),
+                    "employee_count": counts.get(e.id, {}).get("employee_count", 0),
+                    "managed_user_count": counts.get(e.id, {}).get("managed_user_count", 0),
+                }
+                for e in ents
+            ]
+        finally:
+            db.close()
+
+    def _remove_users_from_rbac(self, usernames: List[str]) -> None:
+        if not usernames:
+            return
+
+        policy_file = _policy_file_path()
+        if not _policy_exists(policy_file):
+            return
+
+        try:
+            with open(policy_file, "r") as f:
+                data = json.load(f)
+            user_policies = data.get("users", {})
+            for username in usernames:
+                user_policies.pop(username, None)
+            data["users"] = user_policies
+            with open(policy_file, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to remove RBAC entries for deleted enterprise users: {e}")
+
+    def _get_scoped_target_user(self, db, current_user: Optional[User], username: str) -> Optional[UserModel]:
+        query = db.query(UserModel).filter(
+            UserModel.username == username,
+            UserModel.is_active == True
+        )
+        if current_user is not None:
+            query = self.apply_scope(query, current_user, UserModel)
+        return query.first()
+
+    def delete_user(self, username: str, current_user: Optional[User] = None) -> bool:
+        db = SessionLocal()
+        try:
+            user = self._get_scoped_target_user(db, current_user, username)
             if user:
+                user_id = user.id
+                
+                # Fetch all users owned by this admin (if any) to cascade their deletion
+                child_users = db.query(UserModel).filter(UserModel.owner_admin_id == user_id).all()
+                child_user_ids = [cu.id for cu in child_users]
+                child_usernames = [cu.username for cu in child_users]
+                
+                all_ids = [user_id] + child_user_ids
+                all_usernames = [username] + child_usernames
+                
+                # Cleanup user-specific data
+                db.query(AuthSessionModel).filter(AuthSessionModel.user_id.in_(all_ids)).delete(synchronize_session=False)
+                db.query(ChatHistoryModel).filter(ChatHistoryModel.username.in_(all_usernames)).delete(synchronize_session=False)
+                
+                # Note: We deliberately DO NOT delete records from AuditLogModel, 
+                # ObservabilityEventModel, AdminActionLogModel, or SecurityEventModel to preserve the 
+                # system audit trail for compliance purposes.
+                
+                # Delete child users first to avoid orphaned records
+                if child_user_ids:
+                    db.query(UserModel).filter(UserModel.id.in_(child_user_ids)).delete(synchronize_session=False)
+                
                 db.delete(user)
                 db.commit()
+                
+                self._remove_users_from_rbac(all_usernames)
                 return True
             return False
         finally:
             db.close()
 
-    def reset_password(self, username: str, new_password: str) -> bool:
+    def reset_password(self, username: str, new_password: str, current_user: Optional[User] = None) -> bool:
         db = SessionLocal()
         try:
-            user = db.query(UserModel).filter(UserModel.username == username).first()
+            user = self._get_scoped_target_user(db, current_user, username)
             if user:
                 user.password_hash = self._hash_password(new_password, user.salt)
                 db.commit()
@@ -266,7 +774,16 @@ class UserManager:
         try:
             user = db.query(UserModel).filter(UserModel.username == username).first()
             if user:
-                user.last_connection_json = json.dumps(connection_data)
+                safe_connection = None
+                if connection_data:
+                    safe_connection = {
+                        "engine": connection_data.get("engine"),
+                        "host": connection_data.get("host"),
+                        "port": connection_data.get("port"),
+                        "database": connection_data.get("database"),
+                        "user": connection_data.get("user"),
+                    }
+                user.last_connection_json = json.dumps(safe_connection) if safe_connection else None
                 db.commit()
                 return True
             return False
@@ -288,17 +805,41 @@ class UserManager:
         try:
             user = db.query(UserModel).filter(UserModel.username == username).first()
             if user:
-                # Strip null/empty api_keys — treat them as "cleared" so the system fallback activates
-                clean_configs = {}
-                for provider, cfg in configs.items():
-                    clean_cfg = dict(cfg)
-                    if not clean_cfg.get("api_key"):  # catches None, "", 0
-                        clean_cfg.pop("api_key", None)
-                    clean_configs[provider] = clean_cfg
-                user.llm_config = json.dumps({
+                # 1. Fetch existing config safely
+                existing_config = {}
+                if user.llm_config:
+                    try:
+                        existing_config = json.loads(decrypt_data(user.llm_config))
+                    except Exception as e:
+                        logger.error(f"Failed to decrypt/parse existing LLM config for {username}: {e}")
+                
+                # 2. Merge logic
+                merged_providers = existing_config.get("providers", {})
+                
+                if not configs:
+                    # Frontend clicked "Clear Settings", wipe all providers
+                    merged_providers = {}
+                else:
+                    for provider, cfg in configs.items():
+                        clean_cfg = dict(cfg)
+                        incoming_key = clean_cfg.get("api_key")
+                        
+                        existing_provider_cfg = merged_providers.get(provider, {})
+                        
+                        # Soft-merge: Preserve existing key if incoming is empty/masked
+                        if not incoming_key or incoming_key == "" or (isinstance(incoming_key, str) and incoming_key.startswith("sk-") and incoming_key.endswith("****")):
+                            existing_key = existing_provider_cfg.get("api_key")
+                            if existing_key:
+                                clean_cfg["api_key"] = existing_key
+                            else:
+                                clean_cfg.pop("api_key", None)
+                        
+                        merged_providers[provider] = clean_cfg
+                
+                user.llm_config = encrypt_data(json.dumps({
                     "active_provider": active_provider,
-                    "providers": clean_configs
-                })
+                    "providers": merged_providers
+                }))
                 db.commit()
                 return True
             return False
@@ -310,14 +851,21 @@ class UserManager:
         try:
             user = db.query(UserModel).filter(UserModel.username == username).first()
             if user and user.llm_config:
-                return json.loads(user.llm_config)
+                return json.loads(decrypt_data(user.llm_config))
             return {"active_provider": "groq", "providers": {}}
         finally:
             db.close()
 
     # ── Per-user RBAC ────────────────────────────────────────────────────
-    def get_user_rbac(self, username: str) -> Dict:
+    def get_user_rbac(self, username: str, current_user: Optional[User] = None) -> Optional[Dict]:
         """Return the blocked_tables and blocked_columns for a specific user."""
+        db = SessionLocal()
+        try:
+            if not self._get_scoped_target_user(db, current_user, username):
+                return None
+        finally:
+            db.close()
+
         policy_file = _policy_file_path()
         if not _policy_exists(policy_file):
             return {"blocked_tables": [], "blocked_columns": []}
@@ -329,8 +877,15 @@ class UserManager:
             logger.error(f"Failed to read RBAC for {username}: {e}")
             return {"blocked_tables": [], "blocked_columns": []}
 
-    def update_user_rbac(self, username: str, blocked_tables: List[str], blocked_columns: List[str]) -> bool:
+    def update_user_rbac(self, username: str, blocked_tables: List[str], blocked_columns: List[str], current_user: Optional[User] = None) -> bool:
         """Set per-user RBAC restrictions (blocked tables/columns)."""
+        db = SessionLocal()
+        try:
+            if not self._get_scoped_target_user(db, current_user, username):
+                return False
+        finally:
+            db.close()
+
         policy_file = _policy_file_path()
         try:
             data = {"users": {}}
@@ -386,12 +941,14 @@ class UserManager:
             logger.error(f"Failed to update RBAC for role {role_name}: {e}")
             return False
 
-    def log_audit(self, username: str, role: str, question: str, sql_query: str, latency_sec: float = None, success: bool = True):
+    def log_audit(self, user: User, question: str, sql_query: str, latency_sec: float = None, success: bool = True):
         db = SessionLocal()
         try:
             log = AuditLogModel(
-                username=username,
-                role=role,
+                enterprise_id=user.enterprise_id,
+                owner_admin_id=self._resolve_owner_admin_id(user),
+                username=user.username,
+                role=user.role,
                 question=question,
                 sql_query=sql_query,
                 latency_sec=latency_sec,
@@ -405,12 +962,25 @@ class UserManager:
         finally:
             db.close()
 
-    def list_audit_logs(self, limit: int = 100) -> List[Dict]:
+    def list_audit_logs(self, current_user: User, limit: int = 100) -> List[Dict]:
         db = SessionLocal()
         try:
-            logs = db.query(AuditLogModel).order_by(AuditLogModel.id.desc()).limit(limit).all()
+            # Filter enterprise_names metadata to only include the current user's scope
+            ent_query = db.query(EnterpriseModel.id, EnterpriseModel.name)
+            if current_user.role != "SUPER_ADMIN":
+                ent_query = ent_query.filter(EnterpriseModel.id == current_user.enterprise_id)
+            
+            enterprise_names = {
+                enterprise.id: enterprise.name
+                for enterprise in ent_query.all()
+            }
+            query = db.query(AuditLogModel)
+            query = self.apply_scope(query, current_user, AuditLogModel)
+            logs = query.order_by(AuditLogModel.id.desc()).limit(limit).all()
             return [
                 {
+                    "enterprise_id": l.enterprise_id,
+                    "enterprise_name": enterprise_names.get(l.enterprise_id),
                     "username": l.username,
                     "role": l.role,
                     "question": l.question,
@@ -423,13 +993,18 @@ class UserManager:
         finally:
             db.close()
 
-    def log_observability_event(self, payload: Dict) -> None:
+    def log_observability_event(self, user: User, payload: Dict) -> Optional[int]:
         db = SessionLocal()
         try:
             event = ObservabilityEventModel(
-                username=payload.get("username"),
-                role=payload.get("role"),
+                request_id=str(payload.get("request_id")) if payload.get("request_id") is not None else None,
+                enterprise_id=user.enterprise_id,
+                owner_admin_id=self._resolve_owner_admin_id(user),
+                username=user.username,
+                role=user.role,
                 db_name=payload.get("db_name"),
+                question=payload.get("question"),
+                sql_query=payload.get("sql_query"),
                 llm_provider=payload.get("llm_provider"),
                 llm_model=payload.get("llm_model"),
                 sql_gen_ms=payload.get("sql_gen_ms"),
@@ -441,18 +1016,38 @@ class UserManager:
                 had_rate_limit=payload.get("had_rate_limit", False),
                 rate_limit_stage=payload.get("rate_limit_stage"),
                 error_stage=payload.get("error_stage"),
+                error_message=payload.get("error_message"),
                 timestamp=payload.get("timestamp") or datetime.datetime.now().isoformat()
             )
             db.add(event)
             db.commit()
+            db.refresh(event)
+            return event.id
         except Exception as e:
             logger.error(f"Failed to save observability event: {e}")
+            return None
+        finally:
+            db.close()
+
+    def update_observability_event(self, event_id: int, updates: Dict) -> None:
+        if not event_id:
+            return
+        db = SessionLocal()
+        try:
+            event = db.query(ObservabilityEventModel).filter(ObservabilityEventModel.id == event_id).first()
+            if event:
+                for k, v in updates.items():
+                    if hasattr(event, k):
+                        setattr(event, k, v)
+                db.commit()
+        except Exception as e:
+            logger.error(f"Failed to update observability event {event_id}: {e}")
         finally:
             db.close()
 
     def log_admin_action(
         self,
-        admin_username: str,
+        admin_user: User,
         action_type: str,
         target_type: Optional[str] = None,
         target_name: Optional[str] = None,
@@ -461,7 +1056,9 @@ class UserManager:
         db = SessionLocal()
         try:
             row = AdminActionLogModel(
-                admin_username=admin_username,
+                enterprise_id=admin_user.enterprise_id,
+                owner_admin_id=admin_user.id, # The admin performing the action IS the owner for this log
+                admin_username=admin_user.username,
                 action_type=action_type,
                 target_type=target_type,
                 target_name=target_name,
@@ -475,12 +1072,25 @@ class UserManager:
         finally:
             db.close()
 
-    def list_admin_action_logs(self, limit: int = 100) -> List[Dict]:
+    def list_admin_action_logs(self, current_user: User, limit: int = 100) -> List[Dict]:
         db = SessionLocal()
         try:
-            rows = db.query(AdminActionLogModel).order_by(AdminActionLogModel.id.desc()).limit(limit).all()
+            # Filter enterprise_names metadata to only include the current user's scope
+            ent_query = db.query(EnterpriseModel.id, EnterpriseModel.name)
+            if current_user.role != "SUPER_ADMIN":
+                ent_query = ent_query.filter(EnterpriseModel.id == current_user.enterprise_id)
+            
+            enterprise_names = {
+                enterprise.id: enterprise.name
+                for enterprise in ent_query.all()
+            }
+            query = db.query(AdminActionLogModel)
+            query = self.apply_scope(query, current_user, AdminActionLogModel)
+            rows = query.order_by(AdminActionLogModel.id.desc()).limit(limit).all()
             return [
                 {
+                    "enterprise_id": row.enterprise_id,
+                    "enterprise_name": enterprise_names.get(row.enterprise_id),
                     "admin_username": row.admin_username,
                     "action_type": row.action_type,
                     "target_type": row.target_type,
@@ -497,8 +1107,11 @@ class UserManager:
         self,
         event_type: str,
         severity: str,
+        user: Optional[User] = None,
         username: Optional[str] = None,
         role: Optional[str] = None,
+        enterprise_id: Optional[int] = None,
+        owner_admin_id: Optional[int] = None,
         event_source: Optional[str] = None,
         resource_name: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None
@@ -506,8 +1119,10 @@ class UserManager:
         db = SessionLocal()
         try:
             row = SecurityEventModel(
-                username=username,
-                role=role,
+                enterprise_id=user.enterprise_id if user else enterprise_id,
+                owner_admin_id=self._resolve_owner_admin_id(user) if user else owner_admin_id,
+                username=user.username if user else username,
+                role=user.role if user else role,
                 event_type=event_type,
                 severity=severity,
                 event_source=event_source,
@@ -522,12 +1137,25 @@ class UserManager:
         finally:
             db.close()
 
-    def list_security_events(self, limit: int = 100) -> List[Dict]:
+    def list_security_events(self, current_user: User, limit: int = 100) -> List[Dict]:
         db = SessionLocal()
         try:
-            rows = db.query(SecurityEventModel).order_by(SecurityEventModel.id.desc()).limit(limit).all()
+            # Filter enterprise_names metadata to only include the current user's scope
+            ent_query = db.query(EnterpriseModel.id, EnterpriseModel.name)
+            if current_user.role != "SUPER_ADMIN":
+                ent_query = ent_query.filter(EnterpriseModel.id == current_user.enterprise_id)
+            
+            enterprise_names = {
+                enterprise.id: enterprise.name
+                for enterprise in ent_query.all()
+            }
+            query = db.query(SecurityEventModel)
+            query = self.apply_scope(query, current_user, SecurityEventModel)
+            rows = query.order_by(SecurityEventModel.id.desc()).limit(limit).all()
             return [
                 {
+                    "enterprise_id": row.enterprise_id,
+                    "enterprise_name": enterprise_names.get(row.enterprise_id),
                     "username": row.username,
                     "role": row.role,
                     "event_type": row.event_type,
@@ -558,13 +1186,25 @@ class UserManager:
     def _format_alert(self, severity: str, stage: str, message: str) -> Dict:
         return {"severity": severity, "stage": stage, "message": message}
 
-    def get_observability_overview(self, limit: int = OBSERVABILITY_LOOKBACK_LIMIT) -> Dict:
+    def _resolve_owner_admin_id(self, user: Optional[User]) -> Optional[int]:
+        if user is None:
+            return None
+        if user.role in {"SUPER_ADMIN", "SYSTEM_ADMIN"}:
+            return user.id
+        return user.owner_admin_id
+
+    def get_observability_overview(self, current_user: User, limit: int = OBSERVABILITY_LOOKBACK_LIMIT) -> Dict:
         db = SessionLocal()
         try:
-            events = db.query(ObservabilityEventModel)\
-                .order_by(ObservabilityEventModel.id.desc())\
+            query = db.query(ObservabilityEventModel)
+            query = self.apply_scope(query, current_user, ObservabilityEventModel)
+            events = query.order_by(ObservabilityEventModel.id.desc())\
                 .limit(limit)\
                 .all()
+
+            # Filter out deleted users for the UI representation
+            active_usernames = {u[0] for u in db.query(UserModel.username).all()}
+            events = [e for e in events if e.username in active_usernames]
 
             if not events:
                 return {
@@ -651,12 +1291,15 @@ class UserManager:
                 )
 
             recent_events = []
-            for event in events[:20]:
+            for event in events:
                 recent_events.append({
                     "timestamp": event.timestamp,
                     "username": event.username,
                     "role": event.role,
                     "db_name": event.db_name,
+                    "request_id": event.request_id,
+                    "question": event.question,
+                    "sql_query": event.sql_query,
                     "llm_provider": event.llm_provider,
                     "llm_model": event.llm_model,
                     "sql_gen_ms": round(event.sql_gen_ms or 0, 2),
@@ -667,10 +1310,13 @@ class UserManager:
                     "success": event.success,
                     "had_rate_limit": event.had_rate_limit,
                     "rate_limit_stage": event.rate_limit_stage,
-                    "error_stage": event.error_stage
+                    "error_stage": event.error_stage,
+                    "error_message": event.error_message
                 })
 
-            security_events = db.query(SecurityEventModel)\
+            security_events = db.query(SecurityEventModel)
+            security_events = self.apply_scope(security_events, current_user, SecurityEventModel)
+            security_events = security_events\
                 .order_by(SecurityEventModel.id.desc())\
                 .limit(limit)\
                 .all()
@@ -719,12 +1365,13 @@ class UserManager:
         finally:
             db.close()
 
-    def get_policy_violation_analytics(self, limit: int = 500) -> Dict:
+    def get_policy_violation_analytics(self, current_user: User, limit: int = 500) -> Dict:
         db = SessionLocal()
         try:
-            rows = db.query(SecurityEventModel)\
-                .filter(SecurityEventModel.event_type == "policy_denial")\
-                .order_by(SecurityEventModel.id.desc())\
+            query = db.query(SecurityEventModel)\
+                .filter(SecurityEventModel.event_type == "policy_denial")
+            query = self.apply_scope(query, current_user, SecurityEventModel)
+            rows = query.order_by(SecurityEventModel.id.desc())\
                 .limit(limit)\
                 .all()
 
@@ -781,11 +1428,12 @@ class UserManager:
         finally:
             db.close()
 
-    def get_slo_panel(self, limit: int = OBSERVABILITY_LOOKBACK_LIMIT) -> Dict:
+    def get_slo_panel(self, current_user: User, limit: int = OBSERVABILITY_LOOKBACK_LIMIT) -> Dict:
         db = SessionLocal()
         try:
-            events = db.query(ObservabilityEventModel)\
-                .order_by(ObservabilityEventModel.id.desc())\
+            query = db.query(ObservabilityEventModel)
+            query = self.apply_scope(query, current_user, ObservabilityEventModel)
+            events = query.order_by(ObservabilityEventModel.id.desc())\
                 .limit(limit)\
                 .all()
 
@@ -854,12 +1502,14 @@ class UserManager:
         finally:
             db.close()
 
-    def get_system_stats(self) -> Dict:
+    def get_system_stats(self, current_user: User) -> Dict:
         """Aggregate audit log data for system health dashboard."""
         db = SessionLocal()
         try:
             from sqlalchemy import func
-            total_queries = db.query(AuditLogModel).count()
+            query = db.query(AuditLogModel)
+            query = self.apply_scope(query, current_user, AuditLogModel)
+            total_queries = query.count()
             if total_queries == 0:
                 return {
                     "total_queries": 0,
@@ -869,12 +1519,11 @@ class UserManager:
                     "popular_topics": []
                 }
 
-            successful_queries = db.query(AuditLogModel).filter(AuditLogModel.success == True).count()
+            successful_queries = query.filter(AuditLogModel.success == True).count()
             success_rate = round((successful_queries / total_queries) * 100, 1)
 
-            avg_latency = db.query(func.avg(AuditLogModel.latency_sec)).scalar() or 0
+            avg_latency = query.with_entities(func.avg(AuditLogModel.latency_sec)).scalar() or 0
             avg_latency = round(float(avg_latency), 2)
-
             # Latency Trend (last 7 days)
             now = datetime.datetime.now()
             trend = []
@@ -886,8 +1535,14 @@ class UserManager:
                 # For sqlite/simple usage, pulling recent logs and processing in python is safer
                 pass # placeholder for trend logic below
             
-            # Simple trend logic: pull last 500 logs and group by date
-            logs = db.query(AuditLogModel).order_by(AuditLogModel.id.desc()).limit(500).all()
+            # Simple trend logic: pull last 500 logs — SCOPED
+            query_logs = db.query(AuditLogModel).order_by(AuditLogModel.id.desc())
+            query_logs = self.apply_scope(query_logs, current_user, AuditLogModel)
+            logs = query_logs.limit(500).all()
+            
+            # Filter out deleted users for the Top User Activity UI
+            active_usernames = {u[0] for u in db.query(UserModel.username).all()}
+            logs = [l for l in logs if l.username in active_usernames]
             
             day_stats = {}
             for l in logs:
@@ -962,13 +1617,14 @@ class UserManager:
 
     def save_chat_history(
         self,
-        username: str,
+        user: User,
         db_name: str,
         question: str,
         sql: str,
-        summary: str,
+        summary: Optional[str],
         results: Dict,
-        visualization: Optional[Dict] = None
+        visualization: Optional[Dict] = None,
+        request_id: Optional[str] = None
     ):
         db = SessionLocal()
         try:
@@ -980,7 +1636,10 @@ class UserManager:
                 visualization_json = json.dumps(visualization, default=self._json_serializable)
             
             history = ChatHistoryModel(
-                username=username,
+                enterprise_id=user.enterprise_id,
+                owner_admin_id=user.owner_admin_id,
+                username=user.username,
+                request_id=str(request_id) if request_id else None,
                 db_name=db_name,
                 question=question,
                 sql_query=sql,
@@ -991,17 +1650,43 @@ class UserManager:
             )
             db.add(history)
             db.commit()
+            db.refresh(history)
+            return history.id
         except Exception as e:
-            logger.error(f"Failed to save chat history for {username}: {e}")
+            logger.error(f"Failed to save chat history for {user.username}: {e}")
+            return None
         finally:
             db.close()
 
-    def get_chat_history(self, username: str, db_name: str, limit: int = 20, start_date: str = None, end_date: str = None, sort: str = "desc") -> List[Dict]:
+    def update_chat_history_partial(self, username: str, request_id: str, updates: Dict[str, Any]):
+        """Update specific fields of a chat history record identified by its request_id."""
+        if not request_id:
+            return
         db = SessionLocal()
         try:
-            # Isolated by username AND db_name
+            item = db.query(ChatHistoryModel).filter(
+                ChatHistoryModel.username == username,
+                ChatHistoryModel.request_id == str(request_id)
+            ).first()
+            if item:
+                for key, val in updates.items():
+                    if hasattr(item, key):
+                        if key in ["results", "visualization", "structured"]:
+                            setattr(item, f"{key}_json" if key != "structured" else key, json.dumps(val, default=self._json_serializable))
+                        else:
+                            setattr(item, key, val)
+                db.commit()
+        except Exception as e:
+            logger.error(f"Partial history update failed for {username}/{request_id}: {e}")
+        finally:
+            db.close()
+
+    def get_chat_history(self, current_user: User, db_name: str, limit: int = 20, start_date: str = None, end_date: str = None, sort: str = "desc") -> List[Dict]:
+        db = SessionLocal()
+        try:
             query = db.query(ChatHistoryModel)\
-                      .filter(ChatHistoryModel.username == username, ChatHistoryModel.db_name == db_name)
+                      .filter(ChatHistoryModel.db_name == db_name)
+            query = self.apply_personal_scope(query, current_user, ChatHistoryModel)
             
             # Date filtering
             if start_date:
@@ -1017,10 +1702,11 @@ class UserManager:
             return [
                 {
                     "id": i.id,
+                    "request_id": i.request_id,
                     "question": i.question,
                     "sql": i.sql_query,
                     "summary": i.summary,
-                    "results": json.loads(i.results_json),
+                    "results": json.loads(i.results_json) if i.results_json else None,
                     "visualization": json.loads(i.visualization_json) if i.visualization_json else None,
                     "timestamp": i.timestamp
                 } for i in items
@@ -1028,12 +1714,13 @@ class UserManager:
         finally:
             db.close()
 
-    def clear_chat_history(self, username: str, db_name: str) -> bool:
+    def clear_chat_history(self, current_user: User, db_name: str) -> bool:
         db = SessionLocal()
         try:
-            db.query(ChatHistoryModel)\
-              .filter(ChatHistoryModel.username == username, ChatHistoryModel.db_name == db_name)\
-              .delete()
+            query = db.query(ChatHistoryModel)\
+                      .filter(ChatHistoryModel.db_name == db_name)
+            query = self.apply_personal_scope(query, current_user, ChatHistoryModel)
+            query.delete(synchronize_session=False)
             db.commit()
             return True
         except Exception as e:
@@ -1042,10 +1729,12 @@ class UserManager:
         finally:
             db.close()
 
-    def delete_history_item(self, username: str, item_id: int) -> bool:
+    def delete_history_item(self, current_user: User, item_id: int) -> bool:
         db = SessionLocal()
         try:
-            item = db.query(ChatHistoryModel).filter(ChatHistoryModel.id == item_id, ChatHistoryModel.username == username).first()
+            query = db.query(ChatHistoryModel).filter(ChatHistoryModel.id == item_id)
+            query = self.apply_personal_scope(query, current_user, ChatHistoryModel)
+            item = query.first()
             if item:
                 db.delete(item)
                 db.commit()

@@ -5,6 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SQL Agent | Professional AI SQL Workspace</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="shortcut icon" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -1275,22 +1278,18 @@ LIMIT 5;</code></pre>
             btn.disabled = true;
 
             try {
-                const res = await fetch('/auth/config');
-                const config = await res.json();
+                // Set an ephemeral solo user identity locally
+                const soloUser = {
+                    username: 'solo_user',
+                    role: 'SOLO_USER',
+                    role_label: 'Solo User',
+                    is_hybrid_solo: true // Hint for app.js
+                };
+                sessionStorage.setItem('sql_agent_user', JSON.stringify(soloUser));
+                sessionStorage.setItem('sql_agent_token', 'standalone-token');
                 
-                if (config.mode === 'solo') {
-                    // Solo mode doesn't need login, land on workspace directly
-                    window.location.href = '/workspace';
-                } else {
-                    // Enterprise mode, we use the fallback "standalone-token" approach if they click "Try Solo"
-                    localStorage.setItem('sql_agent_token', 'standalone-token');
-                    localStorage.setItem('sql_agent_user', JSON.stringify({
-                        username: 'solo_user',
-                        role: 'SOLO_USER',
-                        role_label: 'Solo User'
-                    }));
-                    window.location.href = '/workspace';
-                }
+                // Navigate directly to workspace
+                window.location.href = '/workspace';
             } catch (err) {
                 console.error("Solo transition failed", err);
                 window.location.href = '/workspace';

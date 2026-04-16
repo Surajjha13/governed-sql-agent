@@ -4,102 +4,318 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard | SQL Agent</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="shortcut icon" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
     <style>
         :root {
-            --bg: #f8fafc;
+            --bg: #f1f5fb;
             --surface: #ffffff;
             --text: #0f172a;
             --text-muted: #64748b;
             --brand: #6366f1;
             --brand-hover: #4f46e5;
-            --brand-soft: #e0e7ff;
+            --brand-soft: #eef0ff;
             --border: #e2e8f0;
+            --border-subtle: rgba(148,163,184,0.18);
             --success: #10b981;
             --danger: #ef4444;
             --warning: #f59e0b;
-            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+            --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.08), 0 2px 6px -2px rgb(0 0 0 / 0.06);
+            --shadow-lg: 0 10px 28px -5px rgb(0 0 0 / 0.1), 0 4px 10px -4px rgb(0 0 0 / 0.08);
+            --radius-card: 18px;
+            --kpi-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            background-image:
+                radial-gradient(ellipse at 0% 0%, rgba(99,102,241,0.07) 0%, transparent 50%),
+                radial-gradient(ellipse at 100% 100%, rgba(56,189,248,0.06) 0%, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text); display: flex; min-height: 100vh;
+        }
         h1,h2,h3,h4 { font-family: 'Plus Jakarta Sans', sans-serif; }
 
         /* ─────────── Sidebar ─────────── */
         .sidebar {
-            width: 260px; flex-shrink: 0; background: white;
-            border-right: 1px solid var(--border);
-            display: flex; flex-direction: column; padding: 28px 20px;
+            width: 260px; flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-right: 1px solid rgba(226, 232, 240, 0.6);
+            display: flex; flex-direction: column; padding: 28px 16px;
             position: fixed; top: 0; left: 0; bottom: 0; z-index: 10;
+            box-shadow: 4px 0 32px rgba(99, 102, 241, 0.03);
         }
-        .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-weight: 800; font-size: 1.2rem; margin-bottom: 40px; }
-        .logo-box { width: 34px; height: 34px; background: var(--brand); border-radius: 9px; display: grid; place-items: center; color: white; font-size: 1rem; }
-        .sidebar-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+        .logo {
+            display: flex; align-items: center; gap: 12px; text-decoration: none;
+            color: var(--text); font-weight: 800; font-size: 1.2rem; margin-bottom: 36px;
+            padding: 8px 12px; border-radius: 14px;
+            transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+            letter-spacing: -0.03em;
+        }
+        .logo:hover { background: rgba(99, 102, 241, 0.05); transform: translateY(-1px); }
+        .logo-box {
+            width: 40px; height: 40px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(99, 102, 241, 0.15));
+            border: 1px solid rgba(99, 102, 241, 0.15);
+            border-radius: 12px; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
+        }
+        .logo-box img { width: 24px; height: 24px; object-fit: contain; }
+        .sidebar-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
         .nav-btn {
-            display: flex; align-items: center; gap: 12px; padding: 11px 14px;
-            border: none; background: none; border-radius: 10px; color: var(--text-muted);
-            font-size: 0.9rem; font-weight: 600; cursor: pointer; text-align: left; transition: all 0.15s;
+            display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+            border: none; background: none; border-radius: 14px; color: var(--text-muted);
+            font-size: 0.9rem; font-weight: 600; cursor: pointer; text-align: left;
+            transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+            position: relative;
         }
-        .nav-btn:hover { background: var(--bg); color: var(--text); }
-        .nav-btn.active { background: var(--brand-soft); color: var(--brand); }
-        .nav-btn .icon { font-size: 1.1rem; }
-        .sidebar-separator { height: 1px; background: var(--border); margin: 16px 0; }
+        .nav-btn:hover { background: rgba(99, 102, 241, 0.05); color: var(--brand); }
+        .nav-btn.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(129, 140, 248, 0.04));
+            color: var(--brand); font-weight: 700;
+            box-shadow: 
+                inset 0 0 0 1px rgba(99, 102, 241, 0.12),
+                0 4px 12px rgba(99, 102, 241, 0.06);
+        }
+        .nav-btn.active::before {
+            content: '';
+            position: absolute; left: -16px; top: 25%; bottom: 25%;
+            width: 4px; border-radius: 0 4px 4px 0;
+            background: var(--brand);
+            box-shadow: 2px 0 12px var(--brand);
+        }
+        .nav-btn .icon { font-size: 1.2rem; width: 24px; text-align: center; filter: grayscale(0.2); transition: filter 0.2s; }
+        .nav-btn.active .icon { filter: grayscale(0) drop-shadow(0 0 4px rgba(99,102,241,0.3)); }
+        .sidebar-separator { height: 1px; background: linear-gradient(90deg, transparent, var(--border) 30%, var(--border) 70%, transparent); margin: 12px 0; }
         .workspace-link {
             display: flex; align-items: center; gap: 10px; padding: 11px 14px;
-            border: 1px dashed var(--brand); border-radius: 10px; color: var(--brand);
-            font-weight: 700; font-size: 0.9rem; text-decoration: none; transition: all 0.15s;
+            border: 1px solid rgba(99,102,241,0.3);
+            border-radius: 12px; color: var(--brand);
+            font-weight: 700; font-size: 0.875rem; text-decoration: none;
+            transition: all 0.18s;
+            background: linear-gradient(135deg, rgba(99,102,241,0.04), rgba(129,140,248,0.06));
         }
-        .workspace-link:hover { background: var(--brand-soft); }
-        .user-profile { display: flex; align-items: center; gap: 10px; padding: 16px 0 0; border-top: 1px solid var(--border); margin-top: 16px; }
-        .avatar { width: 36px; height: 36px; background: var(--text); color: white; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 0.9rem; flex-shrink: 0; }
+        .workspace-link:hover {
+            background: var(--brand-soft);
+            border-color: rgba(99,102,241,0.5);
+            transform: translateX(2px);
+        }
+        .user-profile {
+            display: flex; align-items: center; gap: 12px;
+            padding: 16px 12px; 
+            background: rgba(255,255,255,0.4);
+            border: 1px solid rgba(226, 232, 240, 0.5);
+            border-radius: 18px; margin-top: 12px;
+            box-shadow: 0 4px 12px rgba(15,23,42,0.03);
+        }
+        .avatar {
+            width: 38px; height: 38px;
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            color: white; border-radius: 12px; display: grid;
+            place-items: center; font-weight: 700; font-size: 0.9rem;
+            flex-shrink: 0; box-shadow: 0 4px 10px rgba(15,23,42,0.18);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
         .user-info { flex: 1; min-width: 0; }
-        .user-info h4 { font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .user-info span { font-size: 0.75rem; color: var(--text-muted); }
-        .logout-btn { background: none; border: none; cursor: pointer; font-size: 1.1rem; padding: 4px; }
+        .user-info h4 { font-size: 0.88rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #0f172a; }
+        .user-info span { font-size: 0.75rem; color: #64748b; font-weight: 500; }
+        .logout-btn {
+            background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.1); 
+            cursor: pointer; font-size: 1.1rem;
+            width: 34px; height: 34px; border-radius: 10px; color: #ef4444;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+        }
+        .logout-btn:hover { background: #ef4444; color: #fff; transform: scale(1.05); }
 
         /* ─────────── Main Content ─────────── */
-        .main { margin-left: 260px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
-        .topbar { background: white; border-bottom: 1px solid var(--border); padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; }
-        .topbar h1 { font-size: 1.5rem; }
-        .content { padding: 32px; }
+        .main { margin-left: 260px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; position: relative; z-index: 1; }
+        .topbar {
+            background: rgba(248, 250, 252, 0.8);
+            backdrop-filter: blur(14px) saturate(180%);
+            -webkit-backdrop-filter: blur(14px) saturate(180%);
+            border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+            padding: 20px 40px;
+            display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 9;
+            box-shadow: 0 1px 12px rgba(99, 102, 241, 0.02);
+        }
+        .topbar h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.04em; color: #0f172a; }
+        .content { padding: 28px 32px; }
 
         /* ─────────── Tabs ─────────── */
         .tab-panel { display: none; }
         .tab-panel.active { display: block; }
 
         /* ─────────── Cards / Stats ─────────── */
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 32px; }
-        .stat-card { background: white; padding: 24px; border-radius: 14px; border: 1px solid var(--border); }
-        .stat-label { font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
-        .stat-value { font-size: 2rem; font-weight: 800; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 28px; }
+        .stat-card {
+            background: white;
+            padding: 22px 24px 20px;
+            border-radius: var(--radius-card);
+            border: 1px solid rgba(226,232,240,0.8);
+            transition: transform 0.22s cubic-bezier(0.4,0,0.2,1), box-shadow 0.22s cubic-bezier(0.4,0,0.2,1);
+            position: relative; overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #6366f1, #818cf8, #38bdf8);
+            border-radius: 3px 3px 0 0;
+        }
+        .stat-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+        .stat-label { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+        .stat-value { font-size: 2.25rem; font-weight: 800; letter-spacing: -0.03em; background: linear-gradient(135deg, #0f172a, #3b4a6a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 
-        .card { background: white; border-radius: 14px; border: 1px solid var(--border); overflow: hidden; margin-bottom: 24px; }
-        .card-header { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-        .card-header h3 { font-size: 1rem; }
+        .card {
+            background: white;
+            border-radius: var(--radius-card);
+            border: 1px solid rgba(226,232,240,0.8);
+            overflow: hidden; margin-bottom: 22px;
+            transition: box-shadow 0.22s cubic-bezier(0.4,0,0.2,1), transform 0.22s;
+            box-shadow: var(--shadow-sm);
+        }
+        .card:hover { box-shadow: var(--shadow-md); }
+
+        .overview-kpi-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(99, 102, 241, 0.1);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: var(--kpi-shadow);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative; overflow: hidden;
+        }
+        .overview-kpi-card:hover {
+            transform: translateY(-4px);
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 12px 24px rgba(99, 102, 241, 0.08);
+            border-color: rgba(99, 102, 241, 0.2);
+        }
+        .overview-kpi-card .label {
+            font-size: 0.72rem; font-weight: 800; color: #64748b;
+            text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;
+        }
+        .overview-kpi-card .value {
+            font-size: 2.25rem; font-weight: 800; color: #0f172a;
+            letter-spacing: -0.04em; margin-bottom: 6px;
+            background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .overview-kpi-card .meta {
+            font-size: 0.75rem; color: #94a3b8; font-weight: 500;
+        }
+        .overview-kpi-card::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+            background: var(--brand); opacity: 0; transition: opacity 0.2s;
+        }
+        .overview-kpi-card:hover::after { opacity: 1; }
+        .card-header {
+            padding: 18px 24px;
+            border-bottom: 2px solid rgba(99, 102, 241, 0.08);
+            display: flex; align-items: center; justify-content: space-between;
+            background: linear-gradient(180deg, rgba(248, 250, 252, 0.5), rgba(241, 245, 249, 0.5));
+            border-top: 1px solid rgba(255, 255, 255, 0.8);
+        }
+        .card-header h3 { 
+            font-size: 1rem; font-weight: 800; letter-spacing: -0.02em; color: #1e293b;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .card-header h3::before {
+            content: ''; width: 4px; height: 16px; background: var(--brand); border-radius: 4px;
+        }
         .card-body { padding: 24px; }
+
+        /* Subtle Indigo Table Header */
+        .subtle-table-header th {
+            background: rgba(99, 102, 241, 0.05) !important;
+            border-bottom: 2px solid rgba(99, 102, 241, 0.1) !important;
+            color: #4338ca !important;
+            padding-top: 16px; padding-bottom: 16px;
+        }
 
         /* ─────────── Tables ─────────── */
         .table-wrap { overflow-x: auto; }
+        .table-wrap.table-wrap-slo { overflow: visible; }
         table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 13px 20px; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
-        th { background: var(--bg); font-weight: 700; font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        th, td { padding: 13px 20px; text-align: left; border-bottom: 1px solid rgba(226,232,240,0.7); font-size: 0.875rem; }
+        th {
+            background: rgba(99, 102, 241, 0.03);
+            font-weight: 700; font-size: 0.72rem; color: #64748b;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            border-bottom: 1px solid rgba(99, 102, 241, 0.08);
+        }
+        tr { transition: background-color 0.18s ease; }
         tr:last-child td { border-bottom: none; }
-        tr:hover td { background: #fafafa; }
+        tr:hover td { background: #f5f7ff; }
 
         /* ─────────── Buttons ─────────── */
-        .btn { padding: 9px 18px; border-radius: 9px; font-weight: 700; font-size: 0.875rem; border: none; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
-        .btn-primary { background: var(--brand); color: white; }
-        .btn-primary:hover { background: var(--brand-hover); }
-        .btn-outline { background: white; border: 1px solid var(--border); color: var(--text); }
-        .btn-outline:hover { border-color: var(--brand); color: var(--brand); }
+        .btn {
+            padding: 10px 22px; border-radius: 12px; font-weight: 700; font-size: 0.875rem;
+            border: 1px solid transparent; cursor: pointer; transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            font-family: 'Inter', sans-serif; letter-spacing: -0.01em; text-decoration: none !important;
+            outline: none;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #818cf8, #6366f1 60%, #4f46e5);
+            color: white;
+            box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+        }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(99,102,241,0.4);
+        }
+        .btn-outline {
+            background: white; border: 1px solid var(--border); color: var(--text);
+            box-shadow: var(--shadow-sm);
+        }
+        .btn-outline:hover { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
         .btn-danger { background: #fef2f2; color: var(--danger); border: 1px solid #fee2e2; }
         .btn-danger:hover { background: #fee2e2; }
         .btn-warning { background: #fffbeb; color: var(--warning); border: 1px solid #fde68a; }
         .btn-warning:hover { background: #fef3c7; }
-        .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+        
+        .btn-confirm {
+            background: linear-gradient(135deg, #818cf8, #6366f1 60%, #4f46e5);
+            color: white !important;
+            box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+        }
+
+        .btn-confirm:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(99,102,241,0.4);
+        }
+
+        .btn-cancel {
+            background: white;
+            border: 1px solid #e2e8f0;
+            color: #64748b !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .btn-cancel:hover {
+            background: #f1f5f9;
+            color: #0f172a !important;
+            border-color: #cbd5e1;
+        }
+
+        .btn-sm { padding: 6px 12px; font-size: 0.78rem; }
         .action-group { display: flex; gap: 6px; }
 
         /* ─────────── Badges ─────────── */
@@ -109,6 +325,97 @@
         .badge-viewer { background: #f1f5f9; color: #475569; }
         .badge-manager { background: #e0e7ff; color: #3730a3; }
         .badge-scientist { background: #fef3c7; color: #92400e; }
+        .badge-fast {
+            color: #065f46;
+            border: 1px solid rgba(5, 150, 105, 0.38);
+            background:
+                linear-gradient(135deg, rgba(16, 185, 129, 0.24), rgba(236, 253, 245, 0.96));
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.78),
+                0 10px 22px rgba(16, 185, 129, 0.16);
+        }
+        .badge-medium {
+            color: #92400e;
+            border: 1px solid rgba(245, 158, 11, 0.42);
+            background:
+                linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(255, 251, 235, 0.96));
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.78),
+                0 10px 22px rgba(245, 158, 11, 0.14);
+        }
+        .badge-slow {
+            color: #991b1b;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            background:
+                linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(254, 242, 242, 0.97));
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.78),
+                0 10px 22px rgba(239, 68, 68, 0.14);
+        }
+        .latency-badge { 
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 14px;
+            min-width: 84px; border-radius: 999px; font-size: 0.86rem; font-weight: 800; line-height: 1;
+            font-family: 'Fira Code', 'Monaco', monospace; letter-spacing: 0.01em; white-space: nowrap;
+            position: relative; overflow: hidden;
+            box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08); transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .latency-badge::before {
+            content: '';
+            position: absolute;
+            inset: 1px;
+            border-radius: inherit;
+            background: linear-gradient(180deg, rgba(255,255,255,0.45), rgba(255,255,255,0));
+            pointer-events: none;
+        }
+        .latency-badge:hover { transform: translateY(-1px) scale(1.03); box-shadow: 0 8px 16px rgba(15, 23, 42, 0.12); }
+        .latency-badge .latency-icon,
+        .latency-badge .latency-value { position: relative; z-index: 1; }
+        .latency-badge .latency-icon { font-size: 0.95em; opacity: 0.95; filter: saturate(1.15); }
+        .latency-badge .latency-value { font-variant-numeric: tabular-nums; text-shadow: 0 1px 0 rgba(255,255,255,0.35); }
+        .premium-card-table, .slo-table {
+            border-collapse: separate;
+            border-spacing: 0 12px;
+        }
+        .premium-card-table thead th, .slo-table thead th {
+            background: linear-gradient(180deg, #1e293b, #0f172a);
+            color: rgba(241, 245, 249, 0.92);
+            border-bottom: none;
+            box-shadow: inset 0 -1px 0 rgba(255,255,255,0.06);
+            padding: 16px 20px;
+        }
+        .premium-card-table thead th:first-child, .slo-table thead th:first-child {
+            border-top-left-radius: 14px;
+            border-bottom-left-radius: 14px;
+        }
+        .premium-card-table thead th:last-child, .slo-table thead th:last-child {
+            border-top-right-radius: 14px;
+            border-bottom-right-radius: 14px;
+        }
+        .premium-card-table tbody tr td, .slo-table tbody tr td {
+            background: #ffffff;
+            border-top: 1px solid rgba(148, 163, 184, 0.16);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.03);
+            vertical-align: middle;
+            padding: 18px 20px;
+        }
+        .premium-card-table tbody tr td:first-child, .slo-table tbody tr td:first-child {
+            border-left: 1px solid rgba(148, 163, 184, 0.16);
+            border-top-left-radius: 16px;
+            border-bottom-left-radius: 16px;
+        }
+        .premium-card-table tbody tr td:last-child, .slo-table tbody tr td:last-child {
+            border-right: 1px solid rgba(148, 163, 184, 0.16);
+            border-top-right-radius: 16px;
+            border-bottom-right-radius: 16px;
+        }
+        .premium-card-table tbody tr:hover td, .slo-table tbody tr:hover td {
+            background: #fbfdff;
+            border-color: rgba(99, 102, 241, 0.15);
+            box-shadow: 0 10px 24px rgba(99, 102, 241, 0.06);
+        }
+        .slo-table td { padding-top: 16px; padding-bottom: 16px; vertical-align: middle; }
+        .slo-table td:first-child { font-size: 1rem; font-weight: 700; }
 
         /* ─────────── Forms ─────────── */
         .form-group { margin-bottom: 18px; }
@@ -126,6 +433,31 @@
         .modal-header h3 { font-size: 1.2rem; }
         .btn-close { background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--text-muted); line-height: 1; }
         .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+
+        /* ─────────── Confirm Modal (Premium) ─────────── */
+        .confirm-modal-overlay {
+            position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); 
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            display: none; align-items: center; justify-content: center; z-index: 10000; padding: 20px;
+            opacity: 0; transition: opacity 0.3s ease;
+        }
+        .confirm-modal-overlay.open { display: flex; opacity: 1; }
+        .confirm-modal {
+            background: #ffffff; width: 100%; max-width: 440px; border-radius: 24px;
+            border: 1px solid rgba(226, 232, 240, 0.8); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            overflow: hidden; transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            text-align: left;
+        }
+        .confirm-modal-overlay.open .confirm-modal { transform: scale(1); }
+        .confirm-modal-header { padding: 24px 28px 12px; display: flex; align-items: center; gap: 14px; }
+        .confirm-modal-icon {
+            width: 44px; height: 44px; background: rgba(99, 102, 241, 0.08); color: #6366f1;
+            border-radius: 14px; display: grid; place-items: center; font-size: 1.4rem; flex-shrink: 0;
+        }
+        .confirm-modal-title { font-size: 1.25rem; font-weight: 800; color: #1e293b; letter-spacing: -0.02em; }
+        .confirm-modal-body { padding: 0 28px 24px; }
+        .confirm-modal-message { font-size: 0.95rem; line-height: 1.6; color: #64748b; }
+        .confirm-modal-footer { padding: 20px 28px 24px; background: #f8fafc; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 12px; }
 
         /* ─────────── RBAC Card Grid (Mockup Style) ─────────── */
         .rbac-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
@@ -201,28 +533,126 @@
         .alert-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
         .alert.show { display: block; }
 
+        .filter-toolbar {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: end;
+            margin-bottom: 16px;
+        }
+        .filter-field {
+            min-width: 160px;
+            flex: 1;
+        }
+        .filter-field label {
+            display: block;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+        .table-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 12px 24px 20px;
+            border-top: 1px solid var(--border);
+            background: white;
+        }
+        .table-meta {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+        .section-switcher {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .section-switcher .switch-btn {
+            padding: 10px 16px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: white;
+            color: var(--text-muted);
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .section-switcher .switch-btn:hover {
+            border-color: var(--brand);
+            color: var(--brand);
+            background: var(--brand-soft);
+        }
+        .section-switcher .switch-btn.active {
+            background: var(--brand);
+            color: white;
+            border-color: var(--brand);
+        }
+        .audit-section-panel { display: none; }
+        .audit-section-panel.active { display: block; }
+
         /* ─────────── System Health Panel ─────────── */
-        .health-stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 24px; }
-        .health-stat-mini { padding: 20px; border-radius: 12px; text-align: center; border: 1px solid var(--border); }
-        .health-stat-mini.success { background: #f0fdf4; border-color: #dcfce7; }
-        .health-stat-mini.latency { background: #eff6ff; border-color: #dbeafe; }
-        .health-stat-mini.total { background: #f8fafc; border-color: var(--border); }
+        .health-stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 22px; }
+        .health-stat-mini {
+            padding: 20px; border-radius: 14px; text-align: center;
+            border: 1px solid rgba(226,232,240,0.8);
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative; overflow: hidden;
+        }
+        .health-stat-mini::after {
+            content: '';
+            position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+        }
+        .health-stat-mini.success {
+            background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+            border-color: #bbf7d0;
+        }
+        .health-stat-mini.success::after { background: linear-gradient(90deg, #10b981, #34d399); }
+        .health-stat-mini.latency {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border-color: #bfdbfe;
+        }
+        .health-stat-mini.latency::after { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+        .health-stat-mini.total {
+            background: linear-gradient(135deg, #fafbff 0%, #f1f5fb 100%);
+            border-color: #e2e8f0;
+        }
+        .health-stat-mini.total::after { background: linear-gradient(90deg, #6366f1, #818cf8); }
+        .health-stat-mini:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
         
-        .health-mini-label { font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
-        .success .health-mini-label { color: #166534; }
-        .latency .health-mini-label { color: #1e40af; }
+        .health-mini-label { font-size: 0.72rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+        .success .health-mini-label { color: #15803d; }
+        .latency .health-mini-label { color: #1d4ed8; }
         
-        .health-mini-value { font-size: 1.8rem; font-weight: 800; color: var(--text); }
+        .health-mini-value { font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; }
         .success .health-mini-value { color: #15803d; }
         .latency .health-mini-value { color: #1d4ed8; }
+        .total .health-mini-value { background: linear-gradient(135deg, #0f172a, #4f46e5); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 
-        .health-charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .chart-box { border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: white; }
-        .chart-box h4 { font-size: 0.85rem; font-weight: 700; color: var(--text); margin-bottom: 16px; }
+        .health-charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .chart-box {
+            border: 1px solid rgba(226,232,240,0.8);
+            border-radius: 14px; padding: 18px;
+            background: white;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 0.2s;
+        }
+        .chart-box:hover { box-shadow: var(--shadow-md); }
+        .chart-box h4 { font-size: 0.82rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 14px; }
         .chart-container { height: 200px; width: 100%; }
         
-        .refresh-link { font-size: 0.8rem; font-weight: 600; color: var(--brand); cursor: pointer; text-decoration: none; display: flex; align-items: center; gap: 4px; }
-        .refresh-link:hover { text-decoration: underline; }
+        .refresh-link {
+            font-size: 0.8rem; font-weight: 700; color: var(--brand);
+            cursor: pointer; text-decoration: none;
+            display: flex; align-items: center; gap: 4px;
+            padding: 6px 12px; border-radius: 8px;
+            background: var(--brand-soft);
+            transition: all 0.15s;
+        }
+        .refresh-link:hover { background: #dde0ff; color: var(--brand-hover); }
 
         .obs-alert-list { display: grid; gap: 12px; margin-bottom: 20px; }
         .obs-alert-item { border-radius: 12px; padding: 14px 16px; border: 1px solid var(--border); background: #f8fafc; }
@@ -235,10 +665,829 @@
         .obs-stage-card { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: #fff; }
         .obs-stage-card h4 { font-size: 0.92rem; margin-bottom: 10px; }
         .obs-stage-meta { font-size: 0.82rem; color: var(--text-muted); display: grid; gap: 6px; }
+        .obs-incidents-toolbar {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+            align-items: end;
+            padding: 18px;
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 16px;
+            background: linear-gradient(180deg, #ffffff, #f8fafc);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.75);
+        }
+        .obs-incidents-toolbar .filter-field {
+            min-width: 180px;
+            flex: 1;
+        }
+        .obs-incidents-toolbar .filter-field.compact {
+            min-width: 170px;
+            flex: 0 0 auto;
+        }
+        .obs-incidents-toolbar .filter-field label {
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .obs-incidents-toolbar .form-control {
+            background: #fff;
+            border-color: rgba(148, 163, 184, 0.22);
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+        }
+        .obs-events-card-body { padding-bottom: 0; }
+        .obs-events-table-wrap {
+            margin-top: 18px;
+            overflow-x: auto;
+        }
+        .obs-events-table {
+            border-collapse: separate;
+            border-spacing: 0 10px;
+            min-width: 1180px;
+        }
+        .obs-events-table thead th {
+            background: linear-gradient(180deg, #1e293b, #0f172a);
+            color: rgba(241, 245, 249, 0.92);
+            border-bottom: none;
+            box-shadow: inset 0 -1px 0 rgba(255,255,255,0.06);
+        }
+        .obs-events-table thead th:first-child {
+            border-top-left-radius: 14px;
+            border-bottom-left-radius: 14px;
+        }
+        .obs-events-table thead th:last-child {
+            border-top-right-radius: 14px;
+            border-bottom-right-radius: 14px;
+        }
+        .obs-events-table tbody td {
+            background: linear-gradient(180deg, #ffffff, #f8fafc);
+            border-top: 1px solid rgba(148, 163, 184, 0.14);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+            vertical-align: middle;
+        }
+        .obs-events-table tbody td:first-child {
+            border-left: 1px solid rgba(148, 163, 184, 0.14);
+            border-top-left-radius: 16px;
+            border-bottom-left-radius: 16px;
+        }
+        .obs-events-table tbody td:last-child {
+            border-right: 1px solid rgba(148, 163, 184, 0.14);
+            border-top-right-radius: 16px;
+            border-bottom-right-radius: 16px;
+        }
+        .obs-events-table tbody tr:hover td {
+            background: linear-gradient(180deg, #ffffff, #eef4ff);
+        }
+        
+        /* Premium Dual-Ring Loader */
+        .loading-spinner-ring {
+            width: 36px; height: 36px;
+            border: 3px solid rgba(99, 102, 241, 0.1);
+            border-top-color: var(--brand);
+            border-radius: 50%;
+            display: inline-block;
+            animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            position: relative;
+        }
+        .loading-spinner-ring::after {
+            content: '';
+            position: absolute; inset: 4px;
+            border: 2px solid rgba(99, 102, 241, 0.05);
+            border-bottom-color: var(--brand);
+            border-radius: 50%;
+            animation: spin-reverse 0.6s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes spin-reverse { to { transform: rotate(-360deg); } }
+        .obs-events-table .obs-time {
+            font-weight: 600;
+            color: #0f172a;
+            white-space: nowrap;
+        }
+        .obs-events-table .obs-user {
+            font-weight: 700;
+            color: #1e293b;
+        }
+        .obs-provider {
+            display: inline-flex;
+            align-items: center;
+            max-width: 100%;
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.14), rgba(224, 231, 255, 0.9));
+            border: 1px solid rgba(99, 102, 241, 0.18);
+            color: #3730a3;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .obs-status-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 7px 12px;
+            border-radius: 999px;
+            font-size: 0.76rem;
+            font-weight: 800;
+            letter-spacing: 0.01em;
+            white-space: nowrap;
+        }
+        .obs-status-pill.healthy {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(236, 253, 245, 0.96));
+            border: 1px solid rgba(16, 185, 129, 0.32);
+            color: #065f46;
+        }
+        .obs-status-pill.error {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.18), rgba(254, 242, 242, 0.97));
+            border: 1px solid rgba(239, 68, 68, 0.32);
+            color: #991b1b;
+        }
+        .obs-status-pill.rate-limit {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(255, 251, 235, 0.96));
+            border: 1px solid rgba(245, 158, 11, 0.34);
+            color: #92400e;
+        }
+        .obs-events-table .badge-analyst,
+        .obs-events-table .badge-admin {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 7px 12px;
+            border-radius: 999px;
+            font-size: 0.76rem;
+            font-weight: 800;
+            letter-spacing: 0.01em;
+            white-space: nowrap;
+        }
+        .obs-events-table .badge-analyst {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(236, 253, 245, 0.96));
+            border: 1px solid rgba(16, 185, 129, 0.32);
+            color: #065f46;
+        }
+        .obs-events-table .badge-admin {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.18), rgba(254, 242, 242, 0.97));
+            border: 1px solid rgba(239, 68, 68, 0.32);
+            color: #991b1b;
+        }
+        .obs-events-meta-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding-top: 14px;
+        }
         .mini-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
         .mini-card { border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: #fff; }
         .mini-card .label { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; }
-        .mini-card .value { font-size: 1.35rem; font-weight: 800; }
+        .mini-card .value { font-size: 1.5rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; }
+
+        /* Security Guardrails Styles */
+        .guardrail-board { display: flex; flex-direction: column; gap: 16px; }
+        .guardrail-row { display: flex; align-items: center; gap: 12px; }
+        .guardrail-label { font-size: 0.85rem; font-weight: 700; color: #475569; min-width: 140px; }
+        .guardrail-status { display: flex; align-items: center; gap: 8px; flex: 1; flex-wrap: wrap; }
+        
+        .command-chip {
+            padding: 4px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 800;
+            background: #fff; border: 1px solid rgba(239, 68, 68, 0.2); color: #ef4444;
+            font-family: 'Fira Code', monospace; letter-spacing: 0.02em;
+            box-shadow: 0 2px 4px rgba(239, 68, 68, 0.05);
+        }
+        .guardrail-pill {
+            padding: 5px 12px; border-radius: 99px; font-size: 0.78rem; font-weight: 700;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .guardrail-pill.active { background: #ecfdf5; color: #059669; border: 1px solid #10b98144; }
+        .guardrail-pill.active::before { content: '✓'; font-weight: 900; }
+
+        .enterprise-panel {
+            display: grid;
+            gap: 22px;
+        }
+        .enterprise-hero {
+            position: relative;
+            overflow: hidden;
+            padding: 30px;
+            border-radius: 24px;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            background:
+                radial-gradient(circle at top left, rgba(125, 211, 252, 0.22), transparent 34%),
+                radial-gradient(circle at 85% 20%, rgba(251, 191, 36, 0.18), transparent 28%),
+                linear-gradient(135deg, #0f172a 0%, #111827 54%, #1e293b 100%);
+            box-shadow: 0 28px 60px rgba(15, 23, 42, 0.18);
+        }
+        .enterprise-hero::after {
+            content: '';
+            position: absolute;
+            inset: auto -10% -55% 48%;
+            height: 280px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,255,255,0.16), transparent 62%);
+            pointer-events: none;
+        }
+        .enterprise-hero-header {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 20px;
+            margin-bottom: 28px;
+        }
+        .enterprise-hero-copy {
+            flex: 1;
+            max-width: 760px;
+            padding-right: 28px;
+        }
+        .enterprise-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            color: rgba(226, 232, 240, 0.92);
+            background: rgba(15, 23, 42, 0.3);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+        .enterprise-hero-copy h2 {
+            color: #f8fafc;
+            font-size: clamp(1.8rem, 3vw, 2.4rem);
+            line-height: 1.05;
+            margin-bottom: 12px;
+            max-width: 15ch;
+        }
+        .enterprise-hero-copy p {
+            color: rgba(226, 232, 240, 0.76);
+            font-size: 0.98rem;
+            line-height: 1.7;
+            max-width: 56ch;
+        }
+        .enterprise-hero-actions {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-end;
+            flex: 0 0 auto;
+        }
+        .btn-premium {
+            border: 1px solid rgba(255,255,255,0.18);
+            background: linear-gradient(135deg, #f8fafc 0%, #dbeafe 45%, #bfdbfe 100%);
+            color: #0f172a;
+            box-shadow: 0 16px 28px rgba(15, 23, 42, 0.2);
+        }
+        .btn-premium:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 20px 34px rgba(15, 23, 42, 0.24);
+        }
+        .btn-glass {
+            color: #e2e8f0;
+            border: 1px solid rgba(148, 163, 184, 0.26);
+            background: rgba(255,255,255,0.06);
+            backdrop-filter: blur(10px);
+        }
+        .btn-glass:hover {
+            background: rgba(255,255,255,0.12);
+            color: #fff;
+            border-color: rgba(191, 219, 254, 0.42);
+        }
+        .enterprise-kpi-grid {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+        }
+        .enterprise-kpi-card {
+            padding: 16px 18px;
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06));
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(12px);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
+        }
+        .enterprise-kpi-card .label {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(191, 219, 254, 0.74);
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        .enterprise-kpi-card .value {
+            color: #f8fafc;
+            font-size: 1.75rem;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+        .enterprise-kpi-card .meta {
+            color: rgba(226, 232, 240, 0.72);
+            font-size: 0.82rem;
+        }
+        .enterprise-table-card {
+            border-radius: 24px;
+            overflow: hidden;
+            background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98));
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            box-shadow: 0 22px 48px rgba(15, 23, 42, 0.08);
+        }
+        .enterprise-table-shell {
+            padding: 18px;
+            background:
+                radial-gradient(circle at top right, rgba(191, 219, 254, 0.28), transparent 24%),
+                linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.95));
+        }
+        .enterprise-table-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            padding: 8px 8px 18px;
+        }
+        .enterprise-table-head h3 {
+            font-size: 1.08rem;
+            margin-bottom: 4px;
+        }
+        .enterprise-table-head p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        .enterprise-table-meta {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        .enterprise-meta-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.04);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            color: #334155;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+        .enterprise-meta-pill strong {
+            color: #0f172a;
+        }
+        .enterprise-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 14px;
+        }
+        .enterprise-table thead th {
+            background: transparent;
+            border-bottom: none;
+            padding: 0 18px 4px;
+            color: #64748b;
+        }
+        .enterprise-table tbody td {
+            padding: 20px 18px;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            border-top: 1px solid rgba(148, 163, 184, 0.14);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+            vertical-align: middle;
+            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+        }
+        .enterprise-table tbody td:first-child {
+            border-left: 1px solid rgba(148, 163, 184, 0.14);
+            border-top-left-radius: 20px;
+            border-bottom-left-radius: 20px;
+        }
+        .enterprise-table tbody td:last-child {
+            border-right: 1px solid rgba(148, 163, 184, 0.14);
+            border-top-right-radius: 20px;
+            border-bottom-right-radius: 20px;
+        }
+        .enterprise-table tbody tr:hover td {
+            background: linear-gradient(180deg, #ffffff 0%, #eef6ff 100%);
+        }
+        .enterprise-name-cell {
+            display: grid;
+            gap: 6px;
+        }
+        .enterprise-name-top {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .enterprise-monogram {
+            width: 46px;
+            height: 46px;
+            border-radius: 15px;
+            display: grid;
+            place-items: center;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 800;
+            font-size: 1rem;
+            color: #eff6ff;
+            background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 58%, #38bdf8 100%);
+            box-shadow: 0 14px 24px rgba(29, 78, 216, 0.24);
+        }
+        .enterprise-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+        .enterprise-id {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            letter-spacing: 0.03em;
+        }
+        .enterprise-subline {
+            color: #475569;
+            font-size: 0.84rem;
+        }
+        .enterprise-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+        }
+        .enterprise-status::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            box-shadow: 0 0 0 4px rgba(255,255,255,0.36);
+        }
+        .enterprise-status.active {
+            color: #047857;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.24), rgba(236, 253, 245, 0.96));
+            border: 1px solid rgba(16, 185, 129, 0.28);
+        }
+        .enterprise-status.inactive {
+            color: #b45309;
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(255, 251, 235, 0.96));
+            border: 1px solid rgba(245, 158, 11, 0.28);
+        }
+        .enterprise-people {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .enterprise-person-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid transparent;
+            font-size: 0.78rem;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        .enterprise-person-pill span {
+            color: #475569;
+            font-weight: 700;
+        }
+        .enterprise-person-pill strong {
+            color: #0f172a;
+        }
+        .enterprise-person-pill.admins {
+            background: rgba(224, 231, 255, 0.72);
+            border-color: rgba(99, 102, 241, 0.18);
+        }
+        .enterprise-person-pill.employees {
+            background: rgba(226, 232, 240, 0.62);
+            border-color: rgba(148, 163, 184, 0.18);
+        }
+        .enterprise-person-pill.total {
+            background: rgba(254, 240, 138, 0.42);
+            border-color: rgba(245, 158, 11, 0.22);
+        }
+        .enterprise-created {
+            display: grid;
+            gap: 4px;
+        }
+        .enterprise-created strong {
+            color: #0f172a;
+            font-size: 0.88rem;
+        }
+        .enterprise-created span {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+        }
+        .enterprise-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .enterprise-action-btn {
+            min-width: 108px;
+            justify-content: center;
+            border-radius: 999px;
+            padding: 10px 16px;
+        }
+        .enterprise-action-btn.btn-outline {
+            background: rgba(255,255,255,0.9);
+            border-color: rgba(148, 163, 184, 0.2);
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+        }
+        .enterprise-action-btn.btn-danger {
+            box-shadow: 0 10px 22px rgba(239, 68, 68, 0.08);
+        }
+        .enterprise-empty {
+            padding: 54px 24px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+        .enterprise-empty strong {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 1.05rem;
+            color: #0f172a;
+        }
+        .enterprise-empty p {
+            max-width: 34rem;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        .roles-card {
+            border-radius: 24px;
+            overflow: hidden;
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98));
+            box-shadow: 0 22px 48px rgba(15, 23, 42, 0.07);
+        }
+        .roles-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            padding: 22px 26px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+            background:
+                radial-gradient(circle at top right, rgba(191, 219, 254, 0.26), transparent 28%),
+                linear-gradient(180deg, #ffffff, #f8fafc);
+        }
+        .roles-card-copy h3 {
+            font-size: 1.08rem;
+            margin-bottom: 6px;
+        }
+        .roles-card-copy p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        .roles-card-tools {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        .roles-meta-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 14px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.04);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            color: #475569;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+        .roles-meta-pill strong {
+            color: #0f172a;
+        }
+        .roles-table-wrap {
+            padding: 18px;
+        }
+        .roles-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 12px;
+        }
+        .roles-table thead th {
+            background: transparent;
+            border-bottom: none;
+            padding: 0 22px 6px;
+            color: #64748b;
+        }
+        .roles-table tbody td {
+            padding: 18px 22px;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            border-top: 1px solid rgba(148, 163, 184, 0.14);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+            vertical-align: middle;
+            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+        }
+        .roles-table tbody td:first-child {
+            border-left: 1px solid rgba(148, 163, 184, 0.14);
+            border-top-left-radius: 18px;
+            border-bottom-left-radius: 18px;
+        }
+        .roles-table tbody td:last-child {
+            border-right: 1px solid rgba(148, 163, 184, 0.14);
+            border-top-right-radius: 18px;
+            border-bottom-right-radius: 18px;
+        }
+        .roles-table tbody tr:hover td {
+            background: linear-gradient(180deg, #ffffff 0%, #eef6ff 100%);
+        }
+        .role-name-cell {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .role-mark {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 58%, #60a5fa 100%);
+            color: #eff6ff;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 800;
+            box-shadow: 0 14px 24px rgba(29, 78, 216, 0.2);
+        }
+        .role-name-stack {
+            display: grid;
+            gap: 4px;
+        }
+        .role-name-stack strong {
+            color: #0f172a;
+            font-size: 0.98rem;
+        }
+        .role-name-stack span {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            letter-spacing: 0.03em;
+        }
+        .role-desc {
+            color: #334155;
+            line-height: 1.6;
+        }
+        .role-action-cell {
+            text-align: right;
+        }
+        .role-protected {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.05);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            color: #64748b;
+            font-size: 0.78rem;
+            font-weight: 800;
+        }
+        .role-delete-btn {
+            border-radius: 999px;
+            padding: 10px 16px;
+            justify-content: center;
+            box-shadow: 0 10px 22px rgba(239, 68, 68, 0.08);
+        }
+        .roles-empty {
+            padding: 44px 22px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+        .roles-empty strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #0f172a;
+        }
+        @media (max-width: 1080px) {
+            .enterprise-hero-header,
+            .enterprise-table-head,
+            .roles-card-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .enterprise-hero-copy {
+                max-width: none;
+                padding-right: 0;
+            }
+            .enterprise-hero-actions,
+            .enterprise-table-meta,
+            .roles-card-tools {
+                justify-content: flex-start;
+            }
+            .enterprise-kpi-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .enterprise-table {
+                min-width: 980px;
+            }
+            .roles-table {
+                min-width: 900px;
+            }
+        }
+        @media (max-width: 720px) {
+            .content {
+                padding: 20px;
+            }
+            .enterprise-hero {
+                padding: 22px;
+            }
+            .enterprise-kpi-grid {
+                grid-template-columns: 1fr;
+            }
+            .enterprise-monogram {
+                width: 40px;
+                height: 40px;
+                border-radius: 13px;
+            }
+        }
+
+
+        /* ─────────── PREMIUM TOAST SYSTEM ─────────── */
+        #toast-container {
+            position: fixed;
+            bottom: 32px;
+            right: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 99999;
+            pointer-events: none;
+        }
+
+        .toast {
+            pointer-events: auto;
+            min-width: 340px;
+            max-width: 440px;
+            background: #ffffff;
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            border-radius: 20px;
+            padding: 18px 22px;
+            box-shadow: 0 14px 40px rgba(15, 23, 42, 0.12), 0 5px 15px rgba(15, 23, 42, 0.05);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            animation: toast-slide-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(8px);
+        }
+
+        .toast::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 5px;
+            background: var(--brand);
+        }
+
+        .toast.success::before { background: var(--success); }
+        .toast.error::before { background: var(--danger); }
+        .toast.warning::before { background: var(--warning); }
+
+        .toast-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .toast.success .toast-icon { background: rgba(16, 185, 129, 0.08); }
+        .toast.error .toast-icon { background: rgba(239, 68, 68, 0.08); }
+
+        .toast-content { flex: 1; }
+        .toast-message {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #1e293b;
+            line-height: 1.45;
+        }
+
+        @keyframes toast-slide-in {
+            from { transform: translateX(100%) scale(0.92); opacity: 0; }
+            to { transform: translateX(0) scale(1); opacity: 1; }
+        }
+
+        @keyframes toast-fade-out {
+            from { transform: translateX(0) scale(1); opacity: 1; }
+            to { transform: translateX(12px); opacity: 0; }
+        }
+
+        .toast.fade-out { animation: toast-fade-out 0.3s ease forwards; }
+
     </style>
 </head>
 <body>
@@ -246,8 +1495,10 @@
 <!-- ═══════════════════════════════ SIDEBAR ═══════════════════════════════ -->
 <aside class="sidebar">
     <a href="/" class="logo">
-        <div class="logo-box">A</div>
-        SQL Agent
+        <div class="logo-box">
+            <img src="https://img.icons8.com/isometric/50/database.png" alt="Logo" />
+        </div>
+        SQL Agent <span style="font-size: 0.6rem; font-weight: 800; background: var(--brand); color: #fff; padding: 2px 6px; border-radius: 99px; margin-left: 4px; vertical-align: middle;">ADMIN</span>
     </a>
 
     <nav class="sidebar-nav">
@@ -263,12 +1514,17 @@
         <button class="nav-btn" id="nav-roles" onclick="switchTab('roles', this)">
             <span class="icon">🏷️</span> Roles
         </button>
+        <button class="nav-btn" id="nav-enterprises" onclick="switchTab('enterprises', this)" style="display:none">
+            <span class="icon">🏢</span> Enterprises
+        </button>
         <button class="nav-btn" id="nav-audit" onclick="switchTab('audit', this)">
             <span class="icon">📜</span> Audit Logs
         </button>
         <button class="nav-btn" id="nav-observability" onclick="switchTab('observability', this)">
             <span class="icon">📡</span> Observability
         </button>
+        <div class="sidebar-separator"></div>
+
     </nav>
 
     <div class="sidebar-separator"></div>
@@ -280,7 +1536,7 @@
             <h4 id="sidebarUsername">Admin</h4>
             <span>System Administrator</span>
         </div>
-        <button class="logout-btn" onclick="logout()" title="Sign out">🚪</button>
+        <button class="logout-btn" onclick="logout('Manual')" title="Sign out">🚪</button>
     </div>
 </aside>
 
@@ -300,39 +1556,47 @@
 
         <!-- ── Tab: Overview ── -->
         <div id="tab-overview" class="tab-panel active">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">Total Users</div>
-                    <div class="stat-value" id="statTotalUsers">—</div>
+            <div class="enterprise-kpi-grid">
+                <div class="overview-kpi-card">
+                    <div class="label">Total Users</div>
+                    <div class="value" id="statTotalUsers">0</div>
+                    <div class="meta">Registered platform users</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label">Admin Users</div>
-                    <div class="stat-value" id="statAdminUsers">—</div>
+                <div class="overview-kpi-card">
+                    <div class="label">Admin Authority</div>
+                    <div class="value" id="statAdminUsers">0</div>
+                    <div class="meta">Users with management roles</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label">Enterprise Users</div>
-                    <div class="stat-value" id="statRegularUsers">—</div>
+                <div class="overview-kpi-card">
+                    <div class="label">Managed Entities</div>
+                    <div class="value" id="statRegularUsers">0</div>
+                    <div class="meta">Active enterprise workspaces</div>
+                </div>
+                <div class="overview-kpi-card">
+                    <div class="label">Query Volume</div>
+                    <div class="value" id="healthTotalQueries">0</div>
+                    <div class="meta">Processed in last 30 days</div>
                 </div>
             </div>
 
-            <div class="card">
+            <div class="card" style="margin-top: 24px;">
                 <div class="card-header">
-                    <h3>System Health</h3>
+                    <h3><span class="icon">⚡</span> System Health & Performance</h3>
                     <a class="refresh-link" onclick="loadSystemStats()">↻ Refresh Stats</a>
                 </div>
                 <div class="card-body">
-                    <div class="health-stats-row">
-                        <div class="health-stat-mini success">
-                            <div class="health-mini-label">Success Rate</div>
-                            <div class="health-mini-value" id="healthSuccessRate">0%</div>
+                    <div class="mini-grid" style="margin-bottom: 28px;">
+                        <div class="mini-card" style="border-left: 4px solid var(--success);">
+                            <div class="label">Success Rate</div>
+                            <div class="value" id="healthSuccessRate" style="color: var(--success);">0%</div>
                         </div>
-                        <div class="health-stat-mini latency">
-                            <div class="health-mini-label">Avg Latency</div>
-                            <div class="health-mini-value" id="healthAvgLatency">0s</div>
+                        <div class="mini-card" style="border-left: 4px solid #3b82f6;">
+                            <div class="label">Avg Latency</div>
+                            <div class="value" id="healthAvgLatency" style="color: #3b82f6;">0s</div>
                         </div>
-                        <div class="health-stat-mini total">
-                            <div class="health-mini-label">Total Queries</div>
-                            <div class="health-mini-value" id="healthTotalQueries">0</div>
+                        <div class="mini-card" style="border-left: 4px solid var(--brand);">
+                            <div class="label">System Uptime</div>
+                            <div class="value" style="color: var(--brand);">99.9%</div>
                         </div>
                     </div>
 
@@ -347,62 +1611,82 @@
                         </div>
                     </div>
 
-                    <div style="margin-top: 24px;">
-                        <h4 style="font-size: 0.85rem; font-weight: 700; color: var(--text); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                            <span class="icon">👤</span> Top User Activity
-                        </h4>
-                        <div class="table-wrap" style="border: 1px solid var(--border); border-radius: 10px; background: #fafafa;">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>User</th>
-                                        <th>Role</th>
-                                        <th>Queries</th>
-                                        <th>Success %</th>
-                                        <th>Avg Latency</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="userActivityBody">
-                                    <tr><td colspan="5" style="text-align:center; padding: 20px; color: var(--text-muted);">No activity data available yet.</td></tr>
-                                </tbody>
-                            </table>
+                        <div style="margin-top: 32px;">
+                            <h4 style="font-size: 0.85rem; font-weight: 700; color: #1e293b; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
+                                <span class="icon">👤</span> Top User Activity
+                            </h4>
+                            <div class="table-wrap" style="border: 1px solid rgba(99, 102, 241, 0.1); border-radius: 14px; background: #fff; overflow: hidden; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);">
+                                <table class="subtle-table-header">
+                                    <thead>
+                                        <tr>
+                                            <th>User</th>
+                                            <th>Role</th>
+                                            <th>Queries</th>
+                                            <th>Success %</th>
+                                            <th>Avg Latency</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="userActivityBody">
+                                        <tr><td colspan="5" style="text-align:center; padding: 32px; color: var(--text-muted);">No activity data available yet.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3><span class="icon">🛡️</span> Security Guardrails (Active Policies)</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="guardrail-board">
+                            <div class="guardrail-row">
+                                <div class="guardrail-label">Write Protection</div>
+                                <div class="guardrail-status">
+                                    <span class="command-chip">DELETE</span>
+                                    <span class="command-chip">DROP</span>
+                                    <span class="command-chip">TRUNCATE</span>
+                                    <span class="command-chip">INSERT</span>
+                                    <span class="command-chip">UPDATE</span>
+                                    <span class="command-chip">ALTER</span>
+                                    <span style="font-size: 0.75rem; color: var(--text-muted); margin-left: 4px;">Blocked on all tables</span>
+                                </div>
+                            </div>
+                            <div class="guardrail-row">
+                                <div class="guardrail-label">Access Enforcement</div>
+                                <div class="guardrail-status">
+                                    <span class="guardrail-pill active">RBAC (Column Level)</span>
+                                    <span class="guardrail-pill active">Row-Level Filtering</span>
+                                    <span class="guardrail-pill active">PII Scrubbing</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
             <div class="card">
                 <div class="card-header">
-                    <h3>Security Policy (Active)</h3>
-                </div>
-                <div class="card-body" style="background:#f8fafc; font-family: monospace; color: var(--danger); font-size: 0.9rem;">
-                    DENY: DELETE, DROP, TRUNCATE, INSERT, UPDATE, ALTER on all tables<br>
-                    RBAC: Per-user table and column restrictions enforced at query time
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <h3>SLO / SLA Reliability</h3>
+                    <h3><span class="icon">📈</span> SLO / SLA Reliability</h3>
                     <button class="btn btn-outline btn-sm" onclick="loadSloPanel()">↻ Refresh SLO</button>
                 </div>
                 <div class="card-body">
                     <div id="sloSummary" class="mini-grid">
-                        <div class="mini-card"><div class="label">Loading</div><div class="value">...</div></div>
+                        <div class="mini-card shadow-sm"><div class="label">Loading</div><div class="value">...</div></div>
                     </div>
-                    <div class="table-wrap" style="margin-top:20px;">
-                        <table>
+                    <div class="table-wrap" style="margin-top:24px; border: 1px solid rgba(99, 102, 241, 0.1); border-radius: 14px; overflow: hidden;">
+                        <table class="subtle-table-header">
                             <thead>
                                 <tr>
                                     <th>Stage</th>
-                                    <th>P50</th>
-                                    <th>P95</th>
+                                    <th>P50 (ms)</th>
+                                    <th>P95 (ms)</th>
                                     <th>Average</th>
                                     <th>Success Rate</th>
                                 </tr>
                             </thead>
                             <tbody id="sloStageBody">
-                                <tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding: 24px;">Loading SLO metrics...</td></tr>
+                                <tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding: 32px;">Loading SLO metrics...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -411,14 +1695,14 @@
 
             <div class="card">
                 <div class="card-header">
-                    <h3>Policy Violation Analytics</h3>
-                    <button class="btn btn-outline btn-sm" onclick="loadPolicyAnalytics()">↻ Refresh Policy Analytics</button>
+                    <h3><span class="icon">🚨</span> Policy Violation Analytics</h3>
+                    <button class="btn btn-outline btn-sm" onclick="loadPolicyAnalytics()">↻ Refresh Analytics</button>
                 </div>
                 <div class="card-body">
                     <div id="policySummary" class="mini-grid">
-                        <div class="mini-card"><div class="label">Loading</div><div class="value">...</div></div>
+                        <div class="mini-card shadow-sm"><div class="label">Loading</div><div class="value">...</div></div>
                     </div>
-                    <div class="health-charts-grid" style="margin-top:20px;">
+                    <div class="health-charts-grid" style="margin-top:28px;">
                         <div class="chart-box">
                             <h4>Most Blocked Resources</h4>
                             <div id="policyResourcesBox"></div>
@@ -432,6 +1716,62 @@
             </div>
         </div>
 
+        <!-- ── Tab: Enterprises ── -->
+        <div id="tab-enterprises" class="tab-panel">
+            <div class="enterprise-panel">
+                <section class="enterprise-hero">
+                    <div class="enterprise-hero-header">
+                        <div class="enterprise-hero-copy">
+                            <div class="enterprise-eyebrow">Enterprise Command</div>
+                            <h2>Premium control for every workspace</h2>
+                            <p>Monitor organization health, seat distribution, and lifecycle actions from one polished surface designed for high-trust administration.</p>
+                        </div>
+                        <div class="enterprise-hero-actions">
+                            <button class="btn btn-glass" onclick="loadEnterprises()">Refresh List</button>
+                            <button class="btn btn-premium" onclick="openModal('addEnterpriseModal')">+ Create Enterprise</button>
+                        </div>
+                    </div>
+                    <div class="enterprise-kpi-grid" id="enterpriseSummaryGrid">
+                        <div class="enterprise-kpi-card">
+                            <div class="label">Loading</div>
+                            <div class="value">...</div>
+                            <div class="meta">Fetching enterprise portfolio</div>
+                        </div>
+                    </div>
+                </section>
+                <section class="enterprise-table-card">
+                    <div class="enterprise-table-shell">
+                        <div class="enterprise-table-head">
+                            <div>
+                                <h3>All Enterprises</h3>
+                                <p>Workspace inventory with lifecycle controls and headcount visibility.</p>
+                            </div>
+                            <div class="enterprise-table-meta">
+                                <div class="enterprise-meta-pill">Portfolio <strong id="enterprisePortfolioCount">0</strong></div>
+                                <div class="enterprise-meta-pill">Managed Seats <strong id="enterpriseSeatCount">0</strong></div>
+                            </div>
+                        </div>
+                        <div class="table-wrap" style="border: 1px solid rgba(99, 102, 241, 0.1); border-radius: 14px; overflow: hidden; background: #fff;">
+                            <table class="enterprise-table subtle-table-header">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Status</th>
+                                        <th>People</th>
+                                        <th>Created At</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="enterpriseTableBody">
+                                    <tr><td colspan="5" class="enterprise-empty">Loading enterprises...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+                </div>
+        </div>
+
         <!-- ── Tab: Users ── -->
         <div id="tab-users" class="tab-panel">
             <div class="card">
@@ -439,8 +1779,8 @@
                     <h3>Enterprise Users</h3>
                     <button class="btn btn-outline btn-sm" onclick="loadUsers()">↻ Refresh</button>
                 </div>
-                <div class="table-wrap">
-                    <table>
+                <div class="roles-table-wrap" style="padding: 0 4px;">
+                    <table class="roles-table premium-card-table">
                         <thead>
                             <tr>
                                 <th>Username</th>
@@ -458,13 +1798,23 @@
 
         <!-- ── Tab: Roles ── -->
         <div id="tab-roles" class="tab-panel">
-            <div class="card">
-                <div class="card-header">
-                    <h3>Defined Roles</h3>
-                    <button class="btn btn-outline btn-sm" onclick="loadRoles()">↻ Refresh</button>
+            <div class="roles-card">
+                <div class="card-header" style="padding-bottom: 24px;">
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <h3 style="margin: 0; font-size: 1.15rem; font-weight: 850;">Defined Roles</h3>
+                        <p style="margin: 0; color: #64748b; font-size: 0.88rem; font-weight: 500;">Governed role catalog with polished access controls and quick maintenance actions.</p>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="background: rgba(99,102,241,0.05); border: 1px solid rgba(99,102,241,0.1); border-radius: 99px; padding: 6px 14px; font-size: 0.75rem; color: #4338ca; font-weight: 800; display: flex; align-items: center; gap: 6px;">
+                            Total Roles <strong id="roleCountBadge" style="font-weight: 900;">0</strong>
+                        </div>
+                        <button class="btn btn-outline btn-sm" onclick="loadRoles()" style="border-radius: 10px; font-weight: 800; padding: 0 14px; height: 36px; white-space: nowrap;">
+                            <span style="font-size: 1.1rem; line-height: 1; vertical-align: middle; margin-right: 4px;">↻</span> Refresh
+                        </button>
+                    </div>
                 </div>
-                <div class="table-wrap">
-                    <table>
+                <div class="roles-table-wrap" style="padding: 0 4px;">
+                    <table class="roles-table premium-card-table">
                         <thead>
                             <tr>
                                 <th>Role Name</th>
@@ -520,22 +1870,108 @@
 
         <!-- ── Tab: Audit Logs ── -->
         <div id="tab-audit" class="tab-panel">
+            <div class="section-switcher">
+                <button class="switch-btn active" id="auditSwitchLogs" onclick="switchAuditSection('logs', this)">System Audit Logs</button>
+                <button class="switch-btn" id="auditSwitchActions" onclick="switchAuditSection('actions', this)">Admin Action Audit</button>
+                <button class="switch-btn" id="auditSwitchSecurity" onclick="switchAuditSection('security', this)">Security Events</button>
+            </div>
+            <div class="audit-section-panel active" id="audit-section-logs">
             <div class="card">
                 <div class="card-header">
                     <h3>System Audit Logs</h3>
                     <button class="btn btn-outline btn-sm" onclick="loadAuditLogs()">↻ Refresh Logs</button>
                 </div>
+                <div class="card-body">
+                    <div class="filter-toolbar">
+                        <div class="filter-field">
+                            <label for="auditUserFilter">User</label>
+                            <select id="auditUserFilter" class="form-control" onchange="handleAuditFilterChange()">
+                                <option value="">All users</option>
+                            </select>
+                        </div>
+                        <div class="filter-field">
+                            <label for="auditEnterpriseFilter">Enterprise</label>
+                            <select id="auditEnterpriseFilter" class="form-control" onchange="handleAuditFilterChange()">
+                                <option value="">All enterprises</option>
+                            </select>
+                        </div>
+                        <div class="filter-field">
+                            <label for="auditRoleFilter">Role</label>
+                            <select id="auditRoleFilter" class="form-control" onchange="handleAuditFilterChange()">
+                                <option value="">All roles</option>
+                            </select>
+                        </div>
+                        <div class="filter-field" style="min-width:220px; flex:1.2;">
+                            <label for="auditSearchFilter">Search</label>
+                            <input id="auditSearchFilter" type="text" class="form-control" placeholder="Question, SQL, database..." oninput="handleAuditFilterChange()">
+                        </div>
+                        <div class="filter-field" style="min-width:170px; flex:0 0 auto;">
+                            <label for="auditStartDateFilter">From</label>
+                            <input id="auditStartDateFilter" type="date" class="form-control" onchange="handleAuditFilterChange()">
+                        </div>
+                        <div class="filter-field" style="min-width:170px; flex:0 0 auto;">
+                            <label for="auditEndDateFilter">To</label>
+                            <input id="auditEndDateFilter" type="date" class="form-control" onchange="handleAuditFilterChange()">
+                        </div>
+                        <div>
+                            <button class="btn btn-outline btn-sm" onclick="resetAuditFilters()">Reset</button>
+                        </div>
+                    </div>
+                </div>
                 <div class="card-body" id="auditLogContainer">
                     <div style="text-align:center; color:var(--text-muted); padding: 40px 0;">Loading activity logs...</div>
                 </div>
+                <div class="table-footer">
+                    <div id="auditLogMeta" class="table-meta">Showing 0 logs</div>
+                    <button id="auditLogSeeMoreBtn" class="btn btn-outline btn-sm" style="display:none;" onclick="toggleAuditVisible()">Show more</button>
+                </div>
             </div>
+            </div>
+            <div class="audit-section-panel" id="audit-section-actions">
             <div class="card">
                 <div class="card-header">
                     <h3>Admin Action Audit</h3>
                     <button class="btn btn-outline btn-sm" onclick="loadAdminActions()">↻ Refresh Actions</button>
                 </div>
-                <div class="table-wrap">
-                    <table>
+                <div class="card-body" style="padding-bottom: 0;">
+                    <div class="filter-toolbar">
+                        <div class="filter-field">
+                            <label for="adminActionUserFilter">Admin</label>
+                            <select id="adminActionUserFilter" class="form-control" onchange="handleAdminActionFilterChange()">
+                                <option value="">All admins</option>
+                            </select>
+                        </div>
+                        <div class="filter-field">
+                            <label for="adminActionEnterpriseFilter">Enterprise</label>
+                            <select id="adminActionEnterpriseFilter" class="form-control" onchange="handleAdminActionFilterChange()">
+                                <option value="">All enterprises</option>
+                            </select>
+                        </div>
+                        <div class="filter-field">
+                            <label for="adminActionTypeFilter">Action</label>
+                            <select id="adminActionTypeFilter" class="form-control" onchange="handleAdminActionFilterChange()">
+                                <option value="">All actions</option>
+                            </select>
+                        </div>
+                        <div class="filter-field" style="min-width:220px; flex:1.2;">
+                            <label for="adminActionSearchFilter">Search</label>
+                            <input id="adminActionSearchFilter" type="text" class="form-control" placeholder="Target, details..." oninput="handleAdminActionFilterChange()">
+                        </div>
+                        <div class="filter-field" style="min-width:170px; flex:0 0 auto;">
+                            <label for="adminActionStartDateFilter">From</label>
+                            <input id="adminActionStartDateFilter" type="date" class="form-control" onchange="handleAdminActionFilterChange()">
+                        </div>
+                        <div class="filter-field" style="min-width:170px; flex:0 0 auto;">
+                            <label for="adminActionEndDateFilter">To</label>
+                            <input id="adminActionEndDateFilter" type="date" class="form-control" onchange="handleAdminActionFilterChange()">
+                        </div>
+                        <div>
+                            <button class="btn btn-outline btn-sm" onclick="resetAdminActionFilters()">Reset</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-wrap" style="border: 1px solid rgba(99, 102, 241, 0.1); border-radius: 14px; overflow: hidden; background: #fff;">
+                    <table class="subtle-table-header">
                         <thead>
                             <tr>
                                 <th>Time</th>
@@ -550,14 +1986,72 @@
                         </tbody>
                     </table>
                 </div>
+                <div class="table-footer">
+                    <div id="adminActionMeta" class="table-meta">Showing 0 actions</div>
+                    <button id="adminActionSeeMoreBtn" class="btn btn-outline btn-sm" style="display:none;" onclick="toggleAdminActionsVisible()">Show more</button>
+                </div>
+            </div>
+            </div>
+            <div class="audit-section-panel" id="audit-section-security">
+            <div class="card" style="margin-bottom: 24px;">
+                <div class="card-header">
+                    <h3>Security Trend (Last 30 Days)</h3>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">High significance alerts highlighted in red</div>
+                </div>
+                <div class="card-body">
+                    <div id="securityTrendChart" style="height: 240px; width: 100%;"></div>
+                </div>
             </div>
             <div class="card">
                 <div class="card-header">
                     <h3>Security Events</h3>
                     <button class="btn btn-outline btn-sm" onclick="loadSecurityEvents()">↻ Refresh Security Events</button>
                 </div>
-                <div class="table-wrap">
-                    <table>
+                <div class="card-body" style="padding-bottom: 0;">
+                    <div class="filter-toolbar">
+                        <div class="filter-field">
+                            <label for="securityUserFilter">User</label>
+                            <select id="securityUserFilter" class="form-control" onchange="handleSecurityFilterChange()">
+                                <option value="">All users</option>
+                            </select>
+                        </div>
+                        <div class="filter-field">
+                            <label for="securityEnterpriseFilter">Enterprise</label>
+                            <select id="securityEnterpriseFilter" class="form-control" onchange="handleSecurityFilterChange()">
+                                <option value="">All enterprises</option>
+                            </select>
+                        </div>
+                        <div class="filter-field">
+                            <label for="securitySeverityFilter">Severity</label>
+                            <select id="securitySeverityFilter" class="form-control" onchange="handleSecurityFilterChange()">
+                                <option value="">All severities</option>
+                            </select>
+                        </div>
+                        <div class="filter-field">
+                            <label for="securitySourceFilter">Source</label>
+                            <select id="securitySourceFilter" class="form-control" onchange="handleSecurityFilterChange()">
+                                <option value="">All sources</option>
+                            </select>
+                        </div>
+                        <div class="filter-field" style="min-width:220px; flex:1.2;">
+                            <label for="securitySearchFilter">Search</label>
+                            <input id="securitySearchFilter" type="text" class="form-control" placeholder="Event, resource..." oninput="handleSecurityFilterChange()">
+                        </div>
+                        <div class="filter-field" style="min-width:170px; flex:0 0 auto;">
+                            <label for="securityStartDateFilter">From</label>
+                            <input id="securityStartDateFilter" type="date" class="form-control" onchange="handleSecurityFilterChange()">
+                        </div>
+                        <div class="filter-field" style="min-width:170px; flex:0 0 auto;">
+                            <label for="securityEndDateFilter">To</label>
+                            <input id="securityEndDateFilter" type="date" class="form-control" onchange="handleSecurityFilterChange()">
+                        </div>
+                        <div>
+                            <button class="btn btn-outline btn-sm" onclick="resetSecurityFilters()">Reset</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-wrap" style="border: 1px solid rgba(99, 102, 241, 0.1); border-radius: 14px; overflow: hidden; background: #fff;">
+                    <table class="subtle-table-header">
                         <thead>
                             <tr>
                                 <th>Time</th>
@@ -573,32 +2067,41 @@
                         </tbody>
                     </table>
                 </div>
+                <div class="table-footer">
+                    <div id="securityEventMeta" class="table-meta">Showing 0 events</div>
+                    <button id="securityEventSeeMoreBtn" class="btn btn-outline btn-sm" style="display:none;" onclick="toggleSecurityEventsVisible()">Show more</button>
+                </div>
+            </div>
             </div>
         </div>
 
         <div id="tab-observability" class="tab-panel">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">Observed Requests</div>
-                    <div class="stat-value" id="obsRequestCount">0</div>
+            <div class="enterprise-kpi-grid">
+                <div class="overview-kpi-card" style="border-left: 4px solid var(--brand); box-shadow: var(--shadow-sm);">
+                    <div class="label">Observed Requests</div>
+                    <div class="value" id="obsRequestCount">46</div>
+                    <div class="meta">Telemetry captured in last 24h</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label">Success Rate</div>
-                    <div class="stat-value" id="obsSuccessRate">0%</div>
+                <div class="overview-kpi-card" style="border-left: 4px solid var(--success); box-shadow: var(--shadow-sm);">
+                    <div class="label">Success Rate</div>
+                    <div class="value" id="obsSuccessRate">50%</div>
+                    <div class="meta">Average across all LLM stages</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label">P95 Total</div>
-                    <div class="stat-value" id="obsP95Total">0.00 s</div>
+                <div class="overview-kpi-card" style="border-left: 4px solid #3b82f6; box-shadow: var(--shadow-sm);">
+                    <div class="label">P95 Total</div>
+                    <div class="value" id="obsP95Total">12.33 s</div>
+                    <div class="meta">End-to-end latency benchmark</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label">429 Events</div>
-                    <div class="stat-value" id="obsRateLimitCount">0</div>
+                <div class="overview-kpi-card" style="border-left: 4px solid #94a3b8; box-shadow: var(--shadow-sm);">
+                    <div class="label">429 Events</div>
+                    <div class="value" id="obsRateLimitCount">2</div>
+                    <div class="meta">Rate limit denials encountered</div>
                 </div>
             </div>
 
             <div class="card">
                 <div class="card-header">
-                    <h3>Active Alerts</h3>
+                    <h3><span class="icon">🛎️</span> Active Alerts</h3>
                     <button class="btn btn-outline btn-sm" onclick="loadObservability()">↻ Refresh Telemetry</button>
                 </div>
                 <div class="card-body">
@@ -613,7 +2116,7 @@
 
             <div class="card">
                 <div class="card-header">
-                    <h3>Stage Latency</h3>
+                    <h3><span class="icon">⚡</span> Stage Latency</h3>
                 </div>
                 <div class="card-body">
                     <div id="observabilityStages" class="obs-stage-grid"></div>
@@ -622,27 +2125,63 @@
 
             <div class="card">
                 <div class="card-header">
-                    <h3>Recent Incidents</h3>
+                    <h3><span class="icon">📉</span> Recent Incidents</h3>
                 </div>
-                <div class="table-wrap">
-                    <table>
+                <div class="card-body obs-events-card-body" style="padding-bottom: 0;">
+                    <div class="obs-incidents-toolbar" style="margin-bottom: 20px;">
+                        <div class="filter-field">
+                            <label>User</label>
+                            <select id="obsUserFilter" class="form-control" onchange="handleObservabilityFilterChange()">
+                                <option value="">All users</option>
+                            </select>
+                        </div>
+                        <div class="filter-field">
+                            <label>Status</label>
+                            <select id="obsStatusFilter" class="form-control" onchange="handleObservabilityFilterChange()">
+                                <option value="">All statuses</option>
+                                <option value="healthy">Healthy</option>
+                                <option value="error">Error</option>
+                                <option value="rate_limit">Rate Limit</option>
+                            </select>
+                        </div>
+                        <div class="filter-field compact">
+                            <label>From</label>
+                            <input id="obsStartDateFilter" type="date" class="form-control" onchange="handleObservabilityFilterChange()">
+                        </div>
+                        <div class="filter-field compact">
+                            <label>To</label>
+                            <input id="obsEndDateFilter" type="date" class="form-control" onchange="handleObservabilityFilterChange()">
+                        </div>
+                        <div style="display: flex; align-items: flex-end; padding-bottom: 4px;">
+                            <button class="btn btn-outline btn-sm" onclick="resetObservabilityFilters()">Reset</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="roles-table-wrap" style="padding:0 8px;">
+                    <table class="obs-events-table premium-card-table">
                         <thead>
                             <tr>
                                 <th>Time</th>
                                 <th>User</th>
+                                <th>Question</th>
                                 <th>Provider</th>
                                 <th>SQL Gen</th>
                                 <th>DB Exec</th>
                                 <th>Summary</th>
-                                <th>Viz</th>
                                 <th>Total</th>
                                 <th>Status</th>
                             </tr>
                         </thead>
                         <tbody id="observabilityEventsBody">
-                            <tr><td colspan="9" style="text-align:center; color:var(--text-muted); padding: 32px;">Loading telemetry...</td></tr>
+                            <tr><td colspan="10" style="text-align:center; color:var(--text-muted); padding: 32px;">Loading telemetry...</td></tr>
                         </tbody>
                     </table>
+                </div>
+                <div class="card-body" style="padding-top: 12px;">
+                    <div class="obs-events-meta-bar">
+                        <div id="observabilityEventsMeta" style="font-size:0.82rem; color:var(--text-muted);">Showing 0 incidents</div>
+                        <button id="observabilitySeeMoreBtn" class="btn btn-outline btn-sm" style="display:none;" onclick="toggleObservabilityVisible()">See more</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -667,6 +2206,12 @@
         <div class="form-group">
             <label>Password</label>
             <input type="password" id="newPassword" class="form-control" placeholder="Min 6 characters">
+        </div>
+        <div class="form-group" id="entSelectGroup" style="display:none">
+            <label>Enterprise</label>
+            <select id="newEnterpriseId" class="form-control">
+                <option value="">— select enterprise —</option>
+            </select>
         </div>
         <div class="form-group">
             <label>Role</label>
@@ -740,27 +2285,153 @@
     </div>
 </div>
 
+<!-- Add Enterprise Modal -->
+<div class="modal-overlay" id="addEnterpriseModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Create New Enterprise</h3>
+            <button class="btn-close" onclick="closeModal('addEnterpriseModal')">×</button>
+        </div>
+        <div class="form-group">
+            <label>Enterprise Name</label>
+            <input type="text" id="entNameInput" class="form-control" placeholder="e.g. Acme Corp">
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('addEnterpriseModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="createEnterprise()">Create Enterprise</button>
+        </div>
+    </div>
+</div>
 
+<!-- Delete Enterprise Modal -->
+<div class="modal-overlay" id="deleteEnterpriseModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Delete Enterprise</h3>
+            <button class="btn-close" onclick="closeDeleteEnterpriseModal()">×</button>
+        </div>
+        <div style="margin-bottom: 18px; color: var(--text-muted); line-height: 1.6;">
+            This will permanently remove the enterprise and revoke access for every user in it.
+        </div>
+        <div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:14px 16px; border-radius:12px; margin-bottom:18px;">
+            <div style="font-weight:700; margin-bottom:8px;">Destructive action</div>
+            <div id="deleteEnterpriseImpactText" style="font-size:0.9rem; line-height:1.5;"></div>
+        </div>
+        <div class="form-group">
+            <label>Type the enterprise name to confirm</label>
+            <input type="text" id="deleteEnterpriseConfirmInput" class="form-control" placeholder="Enter enterprise name" oninput="handleDeleteEnterpriseNameInput()">
+        </div>
+        <div id="deleteEnterpriseMatchHint" style="font-size:0.82rem; color:var(--text-muted); margin-top:-8px; margin-bottom:8px;"></div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeDeleteEnterpriseModal()">Cancel</button>
+            <button class="btn btn-danger" id="confirmDeleteEnterpriseBtn" onclick="confirmDeleteEnterprise()" disabled>Delete Enterprise</button>
+        </div>
+    </div>
+</div>
 
 <script>
 // ─── State ───────────────────────────────────────────────────────────────────
-let token = '';
 let currentUsername = '';
 let rbacCache = { schema: null, blocked_tables: new Set(), blocked_columns: new Set() };
+const observabilityState = {
+    events: [],
+    visibleCount: 20,
+    filters: {
+        username: '',
+        status: '',
+        startDate: '',
+        endDate: ''
+    }
+};
+let observabilityRefreshTimer = null;
+const auditViewState = {
+    logs: [],
+    visibleCount: 5,
+    filters: { user: '', enterprise: '', role: '', search: '', startDate: '', endDate: '' }
+};
+const adminActionViewState = {
+    actions: [],
+    visibleCount: 5,
+    filters: { user: '', enterprise: '', action: '', search: '', startDate: '', endDate: '' }
+};
+const securityEventViewState = {
+    events: [],
+    visibleCount: 5,
+    filters: { user: '', enterprise: '', severity: '', source: '', search: '', startDate: '', endDate: '' }
+};
+let pendingEnterpriseDelete = null;
+
+function getStoredAuthUser() {
+    const sessionUser = sessionStorage.getItem('sql_agent_user');
+    if (sessionUser) return sessionUser;
+
+    const legacyUser = localStorage.getItem('sql_agent_user');
+    if (legacyUser) {
+        sessionStorage.setItem('sql_agent_user', legacyUser);
+        localStorage.removeItem('sql_agent_user');
+        return legacyUser;
+    }
+    return null;
+}
+
+function getCurrentUser() {
+    const userStr = getStoredAuthUser();
+    if (!userStr) return null;
+    try {
+        return JSON.parse(userStr);
+    } catch (err) {
+        console.warn('Failed to parse stored auth user', err);
+        sessionStorage.removeItem('sql_agent_user');
+        localStorage.removeItem('sql_agent_user');
+        return null;
+    }
+}
+
+function getAdminSessionId() {
+    let sessionId = sessionStorage.getItem('sql_agent_session_id');
+    if (!sessionId) {
+        const legacySessionId = localStorage.getItem('sql_agent_session_id');
+        sessionId = legacySessionId || ('sess_' + Math.random().toString(36).substring(2) + '_' + Date.now());
+        sessionStorage.setItem('sql_agent_session_id', sessionId);
+        localStorage.removeItem('sql_agent_session_id');
+    }
+    return sessionId;
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    token = localStorage.getItem('sql_agent_token');
-    const userStr = localStorage.getItem('sql_agent_user');
-    if (!token || !userStr) return (window.location.href = '/login');
-    const user = JSON.parse(userStr);
-    if (user.role !== 'SYSTEM_ADMIN') {
+    const user = getCurrentUser();
+    if (!user) return (window.location.href = '/login');
+    
+    const isSuperAdmin = user.role === 'SUPER_ADMIN';
+    const isSystemAdmin = user.role === 'SYSTEM_ADMIN';
+    
+    if (!isSuperAdmin && !isSystemAdmin) {
         alert('Administrator access required.');
         return (window.location.href = '/workspace');
     }
+    
     currentUsername = user.username;
     document.getElementById('sidebarUsername').textContent = user.username;
     document.getElementById('sidebarAvatar').textContent = user.username.charAt(0).toUpperCase();
+    document.querySelector('.user-info span').textContent = user.role_label || (isSuperAdmin ? 'Super Admin' : 'System Admin');
+    
+    if (isSuperAdmin) {
+        document.getElementById('nav-enterprises').style.display = 'flex';
+        loadEnterprises();
+    }
+    
     loadStats();
     loadUsers();
     loadRoles();
@@ -769,8 +2440,20 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSloPanel();
     loadPolicyAnalytics();
 
-    // Restore last active tab after refresh
-    const lastTab = localStorage.getItem('admin_active_tab') || 'overview';
+    const lastAuditSection = localStorage.getItem('admin_audit_section') || 'logs';
+    const switchBtn = document.getElementById(
+        lastAuditSection === 'actions' ? 'auditSwitchActions' :
+        lastAuditSection === 'security' ? 'auditSwitchSecurity' :
+        'auditSwitchLogs'
+    );
+    if (switchBtn) switchAuditSection(lastAuditSection, switchBtn);
+
+    // Restore last active tab after refresh (scoped per user)
+    let lastTab = localStorage.getItem(`admin_active_tab:${user.username}`) || 'overview';
+    // Guard: Only SUPER_ADMIN can view the enterprises tab
+    if (lastTab === 'enterprises' && !isSuperAdmin) {
+        lastTab = 'overview';
+    }
     const tabBtns = document.querySelectorAll('.nav-btn');
     const tabBtn = Array.from(tabBtns).find(b => b.getAttribute('onclick') && b.getAttribute('onclick').includes(`'${lastTab}'`));
     if (tabBtn) switchTab(lastTab, tabBtn);
@@ -778,6 +2461,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ─── Tab Switching ────────────────────────────────────────────────────────────
 function switchTab(name, btn) {
+    stopObservabilityAutoRefresh();
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('tab-' + name).classList.add('active');
@@ -788,36 +2472,93 @@ function switchTab(name, btn) {
         rbac: 'Access Control', 
         roles: 'Role Management',
         audit: 'System Audit Logs',
-        observability: 'Enterprise Observability'
+        observability: 'Enterprise Observability',
+        enterprises: 'Enterprise Management'
     };
     document.getElementById('topbarTitle').textContent = titles[name];
     document.getElementById('btn-add-user').style.display = (name === 'users') ? 'inline-flex' : 'none';
     document.getElementById('btn-add-role').style.display = (name === 'roles') ? 'inline-flex' : 'none';
     
-    // Persist active tab for refresh
-    localStorage.setItem('admin_active_tab', name);
+    // Persist active tab for refresh (scoped per user)
+    const _u = getCurrentUser();
+    if (_u) localStorage.setItem(`admin_active_tab:${_u.username}`, name);
     
     if (name === 'audit') {
         loadAuditLogs();
         loadAdminActions();
         loadSecurityEvents();
+        const lastAuditSection = localStorage.getItem('admin_audit_section') || 'logs';
+        const switchBtn = document.getElementById(
+            lastAuditSection === 'actions' ? 'auditSwitchActions' :
+            lastAuditSection === 'security' ? 'auditSwitchSecurity' :
+            'auditSwitchLogs'
+        );
+        if (switchBtn) switchAuditSection(lastAuditSection, switchBtn);
     }
-    if (name === 'observability') loadObservability();
+    if (name === 'observability') {
+        loadObservability();
+        startObservabilityAutoRefresh();
+    }
+    if (name === 'enterprises') loadEnterprises();
+}
+
+function startObservabilityAutoRefresh() {
+    stopObservabilityAutoRefresh();
+    observabilityRefreshTimer = setInterval(() => {
+        const panel = document.getElementById('tab-observability');
+        if (panel && panel.classList.contains('active') && !document.hidden) {
+            loadObservability();
+        }
+    }, 10000);
+}
+
+function stopObservabilityAutoRefresh() {
+    if (observabilityRefreshTimer) {
+        clearInterval(observabilityRefreshTimer);
+        observabilityRefreshTimer = null;
+    }
+}
+
+function switchAuditSection(name, btn) {
+    document.querySelectorAll('.audit-section-panel').forEach(panel => panel.classList.remove('active'));
+    document.querySelectorAll('.section-switcher .switch-btn').forEach(item => item.classList.remove('active'));
+
+    const panel = document.getElementById(`audit-section-${name}`);
+    if (panel) panel.classList.add('active');
+    if (btn) btn.classList.add('active');
+
+    localStorage.setItem('admin_audit_section', name);
 }
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
 async function loadStats() {
     const users = await apiFetch('/auth/users');
     if (!users) return;
-    document.getElementById('statTotalUsers').textContent = users.length;
-    document.getElementById('statAdminUsers').textContent = users.filter(u => u.role === 'SYSTEM_ADMIN').length;
-    document.getElementById('statRegularUsers').textContent = users.filter(u => u.role !== 'SYSTEM_ADMIN').length;
+    
+    const user = getCurrentUser();
+    if (!user) return logout('Missing auth context');
+    
+    if (user.role === 'SUPER_ADMIN') {
+        const enterprises = await apiFetch('/auth/enterprises');
+        const enterpriseManagedUsers = Array.isArray(enterprises)
+            ? enterprises.reduce((sum, enterprise) => sum + (Number(enterprise.managed_user_count) || 0), 0)
+            : 0;
+
+        document.getElementById('statTotalUsers').textContent = users.length + enterpriseManagedUsers;
+        document.getElementById('statAdminUsers').textContent = users.filter(u => u.role === 'SYSTEM_ADMIN').length;
+        document.getElementById('statRegularUsers').textContent = enterpriseManagedUsers;
+    } else {
+        document.getElementById('statTotalUsers').textContent = users.length;
+        document.getElementById('statAdminUsers').textContent = users.filter(u => u.role === 'SYSTEM_ADMIN').length;
+        document.getElementById('statRegularUsers').textContent = users.filter(u => u.role !== 'SYSTEM_ADMIN').length;
+    }
     loadSystemStats();
 }
 
 // ─── System Health ───────────────────────────────────────────────────────────
 let latencyChart = null;
 let topicsChart = null;
+let securityTrendChart = null;
 
 async function loadSystemStats() {
     const stats = await apiFetch('/auth/system-stats');
@@ -839,11 +2580,11 @@ async function loadSystemStats() {
         } else {
             userBody.innerHTML = stats.user_activity.map(u => `
                 <tr>
-                    <td><div style="display:flex; align-items:center; gap:8px;"><div class="avatar" style="width:24px; height:24px; font-size:0.7rem;">${u.username.charAt(0).toUpperCase()}</div><b>${u.username}</b></div></td>
-                    <td><span style="font-size:0.75rem; background:#eee; padding:2px 6px; border-radius:4px; font-weight:600;">${u.role}</span></td>
+                    <td><div style="display:flex; align-items:center; gap:8px;"><div class="avatar" style="width:24px; height:24px; font-size:0.7rem;">${escapeHtml(u.username.charAt(0).toUpperCase())}</div><b>${escapeHtml(u.username)}</b></div></td>
+                    <td><span style="font-size:0.75rem; background:#eee; padding:2px 6px; border-radius:4px; font-weight:600;">${escapeHtml(u.role)}</span></td>
                     <td style="font-weight:700;">${u.queries}</td>
-                    <td><span style="color: ${u.success_rate > 90 ? 'var(--success)' : '#f59e0b'}; font-weight:600;">${u.success_rate}%</span></td>
-                    <td style="color: var(--brand); font-weight:600;">${u.avg_latency}s</td>
+                    <td><span class="latency-badge ${u.success_rate > 90 ? 'badge-fast' : 'badge-medium'}">${u.success_rate}%</span></td>
+                    <td>${formatLatencyBadge(u.avg_latency * 1000, 'total')}</td>
                 </tr>
             `).join('');
         }
@@ -924,7 +2665,129 @@ function renderTopicsChart(data) {
     window.addEventListener('resize', () => {
         latencyChart?.resize();
         topicsChart?.resize();
+        securityTrendChart?.resize();
     });
+}
+
+function renderSecurityTrendChart(filteredEvents) {
+    const chartDom = document.getElementById('securityTrendChart');
+    if (!chartDom) return;
+    if (!securityTrendChart) securityTrendChart = echarts.init(chartDom);
+
+    // Grouping by date for last 30 days
+    const now = new Date();
+    const last30Days = [];
+    for (let i = 29; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        last30Days.push(d.toISOString().split('T')[0]);
+    }
+
+    const dailyStats = {};
+    last30Days.forEach(date => dailyStats[date] = { high: 0, low: 0, highDetails: [], lowDetails: [] });
+
+    filteredEvents.forEach(evt => {
+        const date = evt.timestamp.split('T')[0];
+        if (dailyStats[date]) {
+            const detailStr = `@${evt.username || 'Unknown'}: ${evt.event_type}`;
+            if (evt.severity === 'high') {
+                dailyStats[date].high++;
+                dailyStats[date].highDetails.push(detailStr);
+            } else {
+                dailyStats[date].low++;
+                dailyStats[date].lowDetails.push(detailStr);
+            }
+        }
+    });
+
+    const highData = last30Days.map(d => dailyStats[d].high);
+    const lowData = last30Days.map(d => dailyStats[d].low);
+
+    const option = {
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            formatter: function(params) {
+                const date = last30Days[params[0].dataIndex];
+                const stats = dailyStats[date];
+                const displayDate = new Date(date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+                
+                let html = `<div style="padding: 10px; min-width: 220px; font-family: 'Plus Jakarta Sans', sans-serif;">`;
+                html += `<div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #f1f5f9; color: #0f17 slate 900;">${displayDate}</div>`;
+                
+                if (stats.high > 0) {
+                    html += `<div style="margin-bottom: 12px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span style="font-weight: 700; color: #ef4444; font-size: 0.85rem;">🔴 HIGH SEVERITY (${stats.high})</span>
+                        </div>`;
+                    stats.highDetails.forEach(det => {
+                        html += `<div style="font-size: 0.78rem; color: #475569; padding-left: 8px; margin-bottom: 2px;">• ${det}</div>`;
+                    });
+                    html += `</div>`;
+                }
+
+                if (stats.low > 0) {
+                    html += `<div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span style="font-weight: 700; color: #6366f1; font-size: 0.85rem;">🔵 OTHER EVENTS (${stats.low})</span>
+                        </div>`;
+                    stats.lowDetails.forEach(det => {
+                        html += `<div style="font-size: 0.78rem; color: #475569; padding-left: 8px; margin-bottom: 2px;">• ${det}</div>`;
+                    });
+                    html += `</div>`;
+                }
+
+                if (stats.high === 0 && stats.low === 0) {
+                    html += `<div style="font-size: 0.85rem; color: #94a3b8; text-align:center; padding: 10px 0;">No security events recorded</div>`;
+                }
+
+                html += `</div>`;
+                return html;
+            },
+            backgroundColor: 'rgba(255, 255, 255, 0.98)',
+            borderColor: '#f1f5f9',
+            borderWidth: 1,
+            textStyle: { color: '#0f172a' },
+            extraCssText: 'box-shadow: 0 12px 24px -4px rgba(0,0,0,0.12), 0 8px 12px -4px rgba(0,0,0,0.06); border-radius: 12px; pointer-events: none;'
+        },
+        legend: {
+            data: ['High Severity', 'Other Events'],
+            right: 10,
+            top: 0,
+            textStyle: { color: '#64748b', fontSize: 11 }
+        },
+        grid: { left: '2%', right: '2%', bottom: '5%', top: '15%', containLabel: true },
+        xAxis: {
+            type: 'category',
+            data: last30Days.map(d => d.slice(5)), // MM-DD
+            axisLine: { lineStyle: { color: '#e2e8f0' } },
+            axisLabel: { color: '#94a3b8', fontSize: 10 }
+        },
+        yAxis: {
+            type: 'value',
+            splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } },
+            axisLabel: { color: '#94a3b8', fontSize: 10 }
+        },
+        series: [
+            {
+                name: 'Other Events',
+                type: 'bar',
+                stack: 'total',
+                emphasis: { focus: 'series' },
+                itemStyle: { color: '#6366f1', borderRadius: [0, 0, 0, 0] },
+                data: lowData
+            },
+            {
+                name: 'High Severity',
+                type: 'bar',
+                stack: 'total',
+                emphasis: { focus: 'series' },
+                itemStyle: { color: '#ef4444', borderRadius: [4, 4, 0, 0] },
+                data: highData
+            }
+        ]
+    };
+    securityTrendChart.setOption(option);
 }
 
 // ─── Users Tab ────────────────────────────────────────────────────────────────
@@ -943,13 +2806,27 @@ async function loadUsers() {
         const role_label = u.role.replace(/_/g, ' ');
         const isAdmin = u.username === 'admin';
         return `<tr>
-            <td style="font-weight:600">${u.username}</td>
-            <td><span class="badge ${badgeClass}">${role_label}</span></td>
             <td>
-                <div class="action-group">
-                    <button class="btn btn-warning btn-sm" onclick="openResetPw('${u.username}')">🔑 Reset PW</button>
-                    ${isAdmin ? '<span style="color:var(--text-muted);font-size:0.8rem">Protected</span>' 
-                              : `<button class="btn btn-danger btn-sm" onclick="deleteUser('${u.username}')">🗑 Delete</button>`}
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <div style="width: 42px; height: 42px; background: linear-gradient(135deg, #f1f5f9, #e2e8f0); border: 1px solid rgba(99,102,241,0.1); border-radius: 12px; display: grid; place-items: center; font-size: 1rem; color: var(--brand); font-weight: 800; box-shadow: 0 4px 10px rgba(15,23,42,0.02);">
+                        ${u.username.substring(0, 1).toUpperCase()}
+                    </div>
+                    <div style="display: flex; flex-direction: column;">
+                        <span style="font-weight:800; color:#0f172a; font-size: 1rem;">${escapeHtml(u.username)}</span>
+                        <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;">Verified User</span>
+                    </div>
+                </div>
+            </td>
+            <td><span class="badge ${badgeClass}" style="padding: 6px 14px; font-weight: 800;">${escapeHtml(role_label)}</span></td>
+            <td>
+                <div class="action-group" style="gap: 12px;">
+                    <button class="btn btn-outline btn-sm" onclick='openResetPw(${JSON.stringify(u.username)})' style="border-radius: 10px; background: #fff; font-weight: 800; border-color: rgba(99,102,241,0.2);">
+                        <span style="color: var(--brand); font-size: 1rem;">🔑</span> Reset PW
+                    </button>
+                    ${isAdmin ? '<div style="display: flex; align-items: center; gap: 6px; color: var(--brand); font-weight: 800; font-size: 0.85rem; padding: 0 12px; background: rgba(99,102,241,0.05); border-radius: 10px; height: 38px;"><span>🛡️</span> Protected</div>' 
+                              : `<button class="btn btn-outline btn-sm" onclick='deleteUser(${JSON.stringify(u.username)})' style="border-radius: 10px; color: #ef4444; border-color: rgba(239,68,68,0.2); font-weight: 800;">
+                                  <span style="color: #ef4444; font-size: 1rem;">🗑️</span> Delete
+                                 </button>`}
                 </div>
             </td>
         </tr>`;
@@ -958,18 +2835,43 @@ async function loadUsers() {
 
 // ─── Add User ─────────────────────────────────────────────────────────────────
 function openAddUserModal() {
+    const user = getCurrentUser();
+    if (!user) return logout('Missing auth context');
     document.getElementById('newUsername').value = '';
     document.getElementById('newPassword').value = '';
+    
+    const entGroup = document.getElementById('entSelectGroup');
+    if (user.role === 'SUPER_ADMIN') {
+        entGroup.style.display = 'block';
+        loadEnterpriseOptions();
+    } else {
+        entGroup.style.display = 'none';
+    }
+    
     document.getElementById('addUserModal').classList.add('open');
+}
+
+async function loadEnterpriseOptions() {
+    const enterprises = await apiFetch('/auth/enterprises');
+    const sel = document.getElementById('newEnterpriseId');
+    if (enterprises) {
+        sel.innerHTML = '<option value="">— global / none —</option>' + enterprises.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+    }
 }
 
 async function createUser() {
     const username = document.getElementById('newUsername').value.trim();
     const password = document.getElementById('newPassword').value;
     const role = document.getElementById('newRole').value;
+    const enterprise_id = document.getElementById('newEnterpriseId').value || null;
+    
     if (!username || !password) return showAlert('Username and password are required', 'error');
-    if (password.length < 6) return showAlert('Password must be at least 6 characters', 'error');
-    const res = await apiFetch('/auth/users', 'POST', { username, password, role });
+    if (password.length < 12) return showAlert('Password must be at least 12 characters', 'error');
+    
+    const payload = { username, password, role };
+    if (enterprise_id) payload.enterprise_id = parseInt(enterprise_id);
+    
+    const res = await apiFetch('/auth/users', 'POST', payload);
     if (res) {
         closeModal('addUserModal');
         showAlert(`User '${username}' created successfully!`, 'success');
@@ -979,9 +2881,19 @@ async function createUser() {
 
 // ─── Delete User ──────────────────────────────────────────────────────────────
 async function deleteUser(username) {
-    if (!confirm(`Delete user '${username}'? This cannot be undone.`)) return;
-    const res = await apiFetch(`/auth/users/${username}`, 'DELETE');
-    if (res) { showAlert(`User '${username}' deleted`, 'success'); loadUsers(); loadStats(); loadRbacUserList(); }
+    showConfirmationModal(
+        "Delete User", 
+        `Are you sure you want to delete user '${username}'? This action cannot be undone and will revoke all access immediately.`, 
+        async () => {
+            const res = await apiFetch(`/auth/users/${username}`, 'DELETE');
+            if (res) { 
+                showAlert(`User '${username}' deleted`, 'success'); 
+                loadUsers(); 
+                loadStats(); 
+                loadRbacUserList(); 
+            }
+        }
+    );
 }
 
 // ─── Reset Password ───────────────────────────────────────────────────────────
@@ -995,7 +2907,7 @@ function openResetPw(username) {
 async function doResetPassword() {
     const username = document.getElementById('resetPwModal')._target;
     const newPw = document.getElementById('resetPwInput').value;
-    if (!newPw || newPw.length < 6) return showAlert('New password must be at least 6 characters', 'error');
+    if (!newPw || newPw.length < 12) return showAlert('New password must be at least 12 characters', 'error');
     const res = await apiFetch(`/auth/users/${username}/reset-password`, 'POST', { new_password: newPw });
     if (res) { closeModal('resetPwModal'); showAlert(`Password reset for '${username}'`, 'success'); }
 }
@@ -1005,19 +2917,35 @@ async function loadRoles() {
     const roles = await apiFetch('/auth/roles');
     const tbody = document.getElementById('roleTableBody');
     const roleSelect = document.getElementById('newRole');
+    const roleCountBadge = document.getElementById('roleCountBadge');
 
     if (!roles) return;
+    if (roleCountBadge) roleCountBadge.textContent = String(roles.length);
 
     if (roles.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:32px">No roles defined</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3"><div class="roles-empty"><strong>No roles defined</strong><span>Create a role to start structuring access across your workspace.</span></div></td></tr>';
     } else {
         tbody.innerHTML = roles.map(r => `
             <tr>
-                <td style="font-weight:600">${r.name}</td>
-                <td>${r.description || '—'}</td>
                 <td>
-                    <div class="action-group">
-                        ${r.name === 'SYSTEM_ADMIN' ? '<span style="color:var(--text-muted);font-size:0.8rem">Protected</span>' : `<button class="btn btn-danger btn-sm" onclick="deleteRole('${r.name}')">🗑 Delete</button>`}
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <div style="width: 44px; height: 44px; background: linear-gradient(135deg, #1d4ed8, #2563eb); border: 1px solid rgba(255,255,255,0.15); border-radius: 14px; display: grid; place-items: center; font-size: 1.1rem; color: #ffffff; font-weight: 900; box-shadow: 0 8px 16px rgba(29,78,216,0.22);">
+                            ${(r.name || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-weight: 850; color: #0f172a; font-size: 1rem; letter-spacing: -0.01em;">${escapeHtml(r.name)}</span>
+                            <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;">${escapeHtml((r.name || '').replace(/_/g, ' '))}</span>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <span style="color: #475569; font-size: 0.92rem; font-weight: 500;">${escapeHtml(r.description || 'Full access to all system features')}</span>
+                </td>
+                <td style="text-align: right;">
+                    <div style="display: flex; justify-content: flex-end; align-items: center;">
+                        ${r.name === 'SYSTEM_ADMIN' 
+                          ? '<div style="background: rgba(99,102,241,0.05); color: #4338ca; border: 1px solid rgba(99,102,241,0.1); border-radius: 20px; padding: 6px 16px; font-weight: 800; font-size: 0.75rem;">Protected</div>' 
+                          : `<button class="btn btn-outline btn-sm" onclick='deleteRole(${JSON.stringify(r.name)})' style="color: #ef4444; border-color: rgba(239,68,68,0.18); font-weight: 800; padding: 0 16px; height: 35px; border-radius: 10px; background: rgba(239,68,68,0.02);">Delete</button>`}
                     </div>
                 </td>
             </tr>
@@ -1025,7 +2953,7 @@ async function loadRoles() {
     }
 
     // Update Role Select in Add User modal
-    roleSelect.innerHTML = roles.map(r => `<option value="${r.name}">${r.name.replace(/_/g, ' ')}</option>`).join('');
+    roleSelect.innerHTML = roles.map(r => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name.replace(/_/g, ' '))}</option>`).join('');
 }
 
 function openAddRoleModal() {
@@ -1047,15 +2975,230 @@ async function createRole() {
 }
 
 async function deleteRole(name) {
-    if (!confirm(`Delete role '${name}'?`)) return;
-    const res = await apiFetch(`/auth/roles/${name}`, 'DELETE');
+    showConfirmationModal(
+        "Delete Role", 
+        `Are you sure you want to delete the role '${name}'? All users assigned to this role will lose their associated permissions.`, 
+        async () => {
+            const res = await apiFetch(`/auth/roles/${name}`, 'DELETE');
+            if (res) {
+                showAlert(`Role '${name}' deleted`, 'success');
+                loadRoles();
+            }
+        }
+    );
+}
+
+// ─── Enterprises Tab ─────────────────────────────────────────────────────────
+async function loadEnterprises() {
+    const enterprises = await apiFetch('/auth/enterprises');
+    const tbody = document.getElementById('enterpriseTableBody');
+    const summaryGrid = document.getElementById('enterpriseSummaryGrid');
+    const portfolioCount = document.getElementById('enterprisePortfolioCount');
+    const seatCount = document.getElementById('enterpriseSeatCount');
+
+    if (!enterprises || !enterprises.length) {
+        if (summaryGrid) {
+            summaryGrid.innerHTML = `
+                <div class="enterprise-kpi-card">
+                    <div class="label">Portfolio</div>
+                    <div class="value">0</div>
+                    <div class="meta">No enterprises created yet</div>
+                </div>
+                <div class="enterprise-kpi-card">
+                    <div class="label">Active Workspaces</div>
+                    <div class="value">0</div>
+                    <div class="meta">No active organizations</div>
+                </div>
+                <div class="enterprise-kpi-card">
+                    <div class="label">Managed Seats</div>
+                    <div class="value">0</div>
+                    <div class="meta">Users appear here after onboarding</div>
+                </div>
+                <div class="enterprise-kpi-card">
+                    <div class="label">Admin Coverage</div>
+                    <div class="value">0</div>
+                    <div class="meta">Create your first organization to begin</div>
+                </div>
+            `;
+        }
+        if (portfolioCount) portfolioCount.textContent = '0';
+        if (seatCount) seatCount.textContent = '0';
+        tbody.innerHTML = '<tr><td colspan="5"><div class="enterprise-empty"><strong>No enterprises yet</strong><p>Create the first workspace to start assigning admins, onboarding employees, and managing enterprise access from this dashboard.</p></div></td></tr>';
+        return;
+    }
+
+    const summary = enterprises.reduce((acc, enterprise) => {
+        const totalUsers = Number(enterprise.total_users) || 0;
+        const adminCount = Number(enterprise.admin_count) || 0;
+        const employeeCount = Number(enterprise.employee_count) || 0;
+        acc.total += 1;
+        acc.active += enterprise.is_active ? 1 : 0;
+        acc.inactive += enterprise.is_active ? 0 : 1;
+        acc.seats += totalUsers;
+        acc.admins += adminCount;
+        acc.employees += employeeCount;
+        return acc;
+    }, { total: 0, active: 0, inactive: 0, seats: 0, admins: 0, employees: 0 });
+
+    if (summaryGrid) {
+        summaryGrid.innerHTML = `
+            <div class="enterprise-kpi-card shadow-sm" style="border-left: 4px solid var(--brand); background: rgba(255,255,255,0.05);">
+                <div class="label">Portfolio</div>
+                <div class="value">${escapeHtml(summary.total)}</div>
+                <div class="meta">${escapeHtml(summary.active)} active organizations in rotation</div>
+            </div>
+            <div class="enterprise-kpi-card shadow-sm" style="border-left: 4px solid var(--success); background: rgba(255,255,255,0.05);">
+                <div class="label">Managed Seats</div>
+                <div class="value">${escapeHtml(summary.seats)}</div>
+                <div class="meta">${escapeHtml(summary.employees)} employee seats across all workspaces</div>
+            </div>
+            <div class="enterprise-kpi-card shadow-sm" style="border-left: 4px solid #3b82f6; background: rgba(255,255,255,0.05);">
+                <div class="label">Admin Coverage</div>
+                <div class="value">${escapeHtml(summary.admins)}</div>
+                <div class="meta">System admins supervising enterprise operations</div>
+            </div>
+            <div class="enterprise-kpi-card shadow-sm" style="border-left: 4px solid ${summary.inactive ? 'var(--danger)' : '#94a3b8'}; background: rgba(255,255,255,0.05);">
+                <div class="label">Attention Needed</div>
+                <div class="value">${escapeHtml(summary.inactive)}</div>
+                <div class="meta">${summary.inactive ? 'Inactive workspaces may need review' : 'All enterprises are currently active'}</div>
+            </div>
+        `;
+    }
+    if (portfolioCount) portfolioCount.textContent = String(summary.total);
+    if (seatCount) seatCount.textContent = String(summary.seats);
+
+    tbody.innerHTML = enterprises.map(e => `
+        <tr>
+            <td>
+                <div class="enterprise-name-cell" style="display: flex; align-items: center; gap: 14px;">
+                    <div style="width: 42px; height: 42px; background: linear-gradient(135deg, #f1f5f9, #e2e8f0); border: 1px solid rgba(99,102,241,0.1); border-radius: 12px; display: grid; place-items: center; font-size: 1rem; color: var(--brand); font-weight: 800; box-shadow: 0 4px 10px rgba(15,23,42,0.02); flex-shrink: 0;">
+                        ${(e.name || '?').trim().charAt(0).toUpperCase()}
+                    </div>
+                    <div style="display: flex; flex-direction: column;">
+                        <span style="font-weight: 800; color: #0f172a; font-size: 1rem;">${escapeHtml(e.name)}</span>
+                        <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;">Workspace ID ${escapeHtml(e.id)}</span>
+                    </div>
+                </div>
+            </td>
+            <td>
+                <span class="badge ${e.is_active ? 'badge-fast' : 'badge-slow'}" style="padding: 6px 14px; font-weight: 800; text-transform: uppercase; font-size: 0.65rem; border-radius: 20px; background: ${e.is_active ? 'rgba(34,197,94,0.05)' : 'rgba(239,68,68,0.05)'}; color: ${e.is_active ? '#15803d' : '#b91c1c'}; border: 1px solid ${e.is_active ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)'};">
+                    ● ${e.is_active ? 'Active' : 'Inactive'}
+                </span>
+            </td>
+            <td>
+                <div class="enterprise-people" style="display: flex; gap: 8px;">
+                    <span class="badge" style="background: rgba(99,102,241,0.05); color: var(--brand); font-weight: 800; font-size: 0.7rem; border: 1px solid rgba(99,102,241,0.1);"><small style="margin-right:4px; opacity:0.7;">ADM</small> ${escapeHtml(e.admin_count ?? 0)}</span>
+                    <span class="badge" style="background: rgba(99,102,241,0.05); color: var(--brand); font-weight: 800; font-size: 0.7rem; border: 1px solid rgba(99,102,241,0.1);"><small style="margin-right:4px; opacity:0.7;">EMP</small> ${escapeHtml(e.employee_count ?? 0)}</span>
+                    <span class="badge" style="background: #eff6ff; color: #1d4ed8; font-weight: 800; font-size: 0.7rem; border: 1px solid rgba(29,78,216,0.1);"><small style="margin-right:4px; opacity:0.7;">TOT</small> ${escapeHtml(e.total_users ?? 0)}</span>
+                </div>
+            </td>
+            <td>
+                <div class="enterprise-created" style="display: flex; flex-direction: column;">
+                    <span style="font-weight: 700; color: #1e293b; font-size: 0.88rem;">${escapeHtml(formatEnterpriseDate(e.created_at, { dateStyle: 'medium' }))}</span>
+                    <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 600; text-transform: uppercase;">${escapeHtml(formatEnterpriseDate(e.created_at, { timeStyle: 'short' }))}</span>
+                </div>
+            </td>
+            <td>
+                <div class="enterprise-actions">
+                    <button class="btn btn-outline btn-sm enterprise-action-btn" onclick='toggleEnterprise(${e.id}, ${!e.is_active})'>
+                        ${e.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+                    <button class="btn btn-danger btn-sm enterprise-action-btn" onclick='openDeleteEnterpriseModal(${e.id}, ${JSON.stringify(e.name)}, ${e.total_users ?? 0}, ${e.admin_count ?? 0})'>
+                        Delete
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function formatEnterpriseDate(value, options) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleString([], options);
+}
+
+async function createEnterprise() {
+    const name = document.getElementById('entNameInput').value.trim();
+    if (!name) return showAlert('Enterprise name is required', 'error');
+    const res = await apiFetch('/auth/enterprises', 'POST', { name });
     if (res) {
-        showAlert(`Role '${name}' deleted`, 'success');
-        loadRoles();
+        closeModal('addEnterpriseModal');
+        showAlert(`Enterprise '${name}' created!`, 'success');
+        loadEnterprises();
+    }
+}
+
+async function toggleEnterprise(id, active) {
+    const res = await apiFetch(`/auth/enterprises/${id}`, 'PATCH', { is_active: active });
+    if (res) {
+        showAlert(`Enterprise status updated`, 'success');
+        loadEnterprises();
     }
 }
 
 // ─── RBAC Tab ─────────────────────────────────────────────────────────────────
+function openDeleteEnterpriseModal(id, name, totalUsers, adminCount) {
+    const employeeCount = Math.max(0, Number(totalUsers || 0) - Number(adminCount || 0));
+    pendingEnterpriseDelete = {
+        id,
+        name,
+        totalUsers: Number(totalUsers || 0),
+        adminCount: Number(adminCount || 0),
+        employeeCount,
+    };
+
+    document.getElementById('deleteEnterpriseImpactText').textContent =
+        `"${name}" has ${pendingEnterpriseDelete.totalUsers} total users: ${pendingEnterpriseDelete.adminCount} admins and ${pendingEnterpriseDelete.employeeCount} employees.`;
+    document.getElementById('deleteEnterpriseConfirmInput').value = '';
+    document.getElementById('deleteEnterpriseMatchHint').textContent = `Enter "${name}" exactly to enable deletion.`;
+    document.getElementById('deleteEnterpriseMatchHint').style.color = 'var(--text-muted)';
+    document.getElementById('confirmDeleteEnterpriseBtn').disabled = true;
+    openModal('deleteEnterpriseModal');
+}
+
+function handleDeleteEnterpriseNameInput() {
+    const input = document.getElementById('deleteEnterpriseConfirmInput');
+    const hint = document.getElementById('deleteEnterpriseMatchHint');
+    const btn = document.getElementById('confirmDeleteEnterpriseBtn');
+    if (!pendingEnterpriseDelete) {
+        btn.disabled = true;
+        return;
+    }
+
+    const matches = input.value.trim() === pendingEnterpriseDelete.name;
+    btn.disabled = !matches;
+    hint.textContent = matches
+        ? 'Name matched. Deletion is enabled.'
+        : `Enter "${pendingEnterpriseDelete.name}" exactly to enable deletion.`;
+    hint.style.color = matches ? '#15803d' : 'var(--text-muted)';
+}
+
+function closeDeleteEnterpriseModal() {
+    pendingEnterpriseDelete = null;
+    document.getElementById('deleteEnterpriseConfirmInput').value = '';
+    document.getElementById('deleteEnterpriseMatchHint').textContent = '';
+    document.getElementById('deleteEnterpriseMatchHint').style.color = 'var(--text-muted)';
+    document.getElementById('confirmDeleteEnterpriseBtn').disabled = true;
+    closeModal('deleteEnterpriseModal');
+}
+
+async function confirmDeleteEnterprise() {
+    if (!pendingEnterpriseDelete) return;
+
+    const { id, name } = pendingEnterpriseDelete;
+    const res = await apiFetch(`/auth/enterprises/${id}`, 'DELETE');
+    if (res) {
+        closeDeleteEnterpriseModal();
+        showAlert(`Enterprise '${name}' deleted. Removed ${res.deleted_users || 0} users.`, 'success');
+        loadEnterprises();
+        loadUsers();
+        loadStats();
+        loadAdminActions();
+        loadSecurityEvents();
+    }
+}
+
 async function loadRbacUserList() {
     toggleRbacTarget(); 
 }
@@ -1071,7 +3214,7 @@ async function toggleRbacTarget() {
         sel.innerHTML = '<option value="">— choose a user —</option>';
         if (users) {
             users.filter(u => u.username !== 'admin').forEach(u => {
-                sel.insertAdjacentHTML('beforeend', `<option value="${u.username}">${u.username} (${u.role.replace(/_/g,' ')})</option>`);
+                sel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(u.username)}">${escapeHtml(u.username)} (${escapeHtml(u.role.replace(/_/g,' '))})</option>`);
             });
         }
     } else {
@@ -1079,7 +3222,7 @@ async function toggleRbacTarget() {
         sel.innerHTML = '<option value="">— choose a role —</option>';
         if (roles) {
             roles.forEach(r => {
-                sel.insertAdjacentHTML('beforeend', `<option value="${r.name}">${r.name.replace(/_/g,' ')}</option>`);
+                sel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name.replace(/_/g,' '))}</option>`);
             });
         }
     }
@@ -1106,7 +3249,7 @@ async function loadRbac() {
         const endpoint = type === 'USER' ? `/auth/rbac/${target}` : `/auth/rbac/role/${target}`;
         const [rbacData, schema] = await Promise.all([
             apiFetch(endpoint),
-            apiFetch('/active-schema')
+            apiFetch('/active-schema?unfiltered=true')
         ]);
         
         if (!schema) {
@@ -1137,15 +3280,22 @@ function renderRbacGrid() {
         const isBlocked = rbacCache.blocked_tables.has(table.table.toLowerCase());
         const card = document.createElement('div');
         card.className = `rbac-card ${isBlocked ? 'restricted' : ''}`;
+        card.style.cssText = "transition: all 0.25s cubic-bezier(0.4,0,0.2,1); cursor: default; display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; background: #fff; border-radius: 16px; border: 1px solid rgba(99, 102, 241, 0.08); box-shadow: 0 4px 12px rgba(15,23,42,0.02);";
+        
         card.innerHTML = `
-            <div class="rbac-card-content">
-                <label class="ios-toggle">
-                    <input type="checkbox" onchange="toggleTableAccess('${table.table}', this.checked)" ${isBlocked ? 'checked' : ''}>
+            <div class="rbac-card-content" style="display: flex; align-items: center; gap: 16px;">
+                <label class="ios-toggle" style="transform: scale(0.85); flex-shrink: 0;">
+                    <input type="checkbox" onchange='toggleTableAccess(${JSON.stringify(table.table)}, this.checked)' ${isBlocked ? 'checked' : ''}>
                     <span class="ios-slider"></span>
                 </label>
-                <span class="rbac-card-name">${table.table}</span>
+                <div style="display: flex; flex-direction: column;">
+                    <span class="rbac-card-name" style="font-weight: 800; font-size: 0.95rem; color: ${isBlocked ? '#ef4444' : '#0f172a'};">${escapeHtml(table.table)}</span>
+                    <span style="font-size: 0.68rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;">Table Access</span>
+                </div>
             </div>
-            <button class="btn-columns" onclick="openColumnsModal('${table.table}')">Columns</button>
+            <button class="btn btn-outline btn-sm" onclick='openColumnsModal(${JSON.stringify(table.table)})' style="border-radius: 8px; font-size: 0.72rem; padding: 6px 10px;">
+                <span class="icon" style="font-size: 0.8rem;">⚙️</span> Fields
+            </button>
         `;
         grid.appendChild(card);
     });
@@ -1182,12 +3332,12 @@ function openColumnsModal(tableName) {
             <div class="col-info">
                 <div class="col-icon">${icon}</div>
                 <div class="col-details">
-                    <h4>${col.name}</h4>
-                    <p>${col.data_type}</p>
+                    <h4>${escapeHtml(col.name)}</h4>
+                    <p>${escapeHtml(col.data_type)}</p>
                 </div>
             </div>
             <label class="ios-toggle" style="transform: scale(0.9);">
-                <input type="checkbox" onchange="toggleColumnAccess('${fullColName}', this.checked)" ${isBlocked ? 'checked' : ''}>
+                <input type="checkbox" onchange='toggleColumnAccess(${JSON.stringify(fullColName)}, this.checked)' ${isBlocked ? 'checked' : ''}>
                 <span class="ios-slider"></span>
             </label>
         `;
@@ -1200,6 +3350,303 @@ function openColumnsModal(tableName) {
 function toggleColumnAccess(fullColName, isChecked) {
     if (isChecked) rbacCache.blocked_columns.add(fullColName);
     else rbacCache.blocked_columns.delete(fullColName);
+}
+
+function getEnterpriseLabel(record) {
+    return String(
+        record?.enterprise_name ||
+        record?.enterprise ||
+        record?.enterprise_label ||
+        record?.enterprise_id ||
+        'Unassigned'
+    );
+}
+
+function matchesDateRange(timestamp, startDate, endDate) {
+    if (!startDate && !endDate) return true;
+    const value = new Date(timestamp);
+    if (Number.isNaN(value.getTime())) return false;
+    if (startDate) {
+        const start = new Date(`${startDate}T00:00:00`);
+        if (value < start) return false;
+    }
+    if (endDate) {
+        const end = new Date(`${endDate}T23:59:59`);
+        if (value > end) return false;
+    }
+    return true;
+}
+
+function buildSelectOptions(values, placeholder) {
+    const uniqueValues = Array.from(new Set((values || []).filter(Boolean).map(value => String(value)))).sort((a, b) => a.localeCompare(b));
+    return `<option value="">${escapeHtml(placeholder)}</option>` + uniqueValues.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
+}
+
+function hydrateSelect(id, values, placeholder, selectedValue = '') {
+    const select = document.getElementById(id);
+    if (!select) return;
+    select.innerHTML = buildSelectOptions(values, placeholder);
+    select.value = selectedValue || '';
+}
+
+function getAuditFilteredLogs() {
+    return auditViewState.logs.filter(log => {
+        const enterprise = getEnterpriseLabel(log);
+        const haystack = [
+            log.username,
+            log.role,
+            log.question,
+            log.sql,
+            log.db_name,
+            enterprise
+        ].filter(Boolean).join(' ').toLowerCase();
+        const search = auditViewState.filters.search.trim().toLowerCase();
+
+        return (!auditViewState.filters.user || log.username === auditViewState.filters.user)
+            && (!auditViewState.filters.enterprise || enterprise === auditViewState.filters.enterprise)
+            && (!auditViewState.filters.role || log.role === auditViewState.filters.role)
+            && (!search || haystack.includes(search))
+            && matchesDateRange(log.timestamp, auditViewState.filters.startDate, auditViewState.filters.endDate);
+    });
+}
+
+function renderAuditLogs() {
+    const container = document.getElementById('auditLogContainer');
+    const meta = document.getElementById('auditLogMeta');
+    const btn = document.getElementById('auditLogSeeMoreBtn');
+    const filteredLogs = getAuditFilteredLogs();
+    const visibleLogs = filteredLogs.slice(0, auditViewState.visibleCount);
+
+    if (!filteredLogs.length) {
+        container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px">No logs match the selected filters.</div>';
+        if (meta) meta.textContent = 'Showing 0 logs';
+        if (btn) btn.style.display = 'none';
+        return;
+    }
+
+    container.innerHTML = visibleLogs.map(log => {
+        const date = new Date(log.timestamp);
+        const dateStr = date.toLocaleDateString() + ', ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const sql = escapeHtml(log.sql || '')
+            .replace(/\b(SELECT|FROM|WHERE|LEFT JOIN|JOIN|GROUP BY|ORDER BY|LIMIT|OFFSET|AS|ON)\b/g, '<span class="keyword">$1</span>');
+        const enterprise = getEnterpriseLabel(log);
+
+        return `
+            <div class="audit-log-item" style="border: 1px solid rgba(99, 102, 241, 0.12); border-left: 4px solid var(--brand); box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03); background: #fff;">
+                <div class="audit-header">
+                    <div class="audit-user-info">
+                        <span style="font-weight: 800; color: #0f172a; font-size: 0.95rem;">${escapeHtml(log.username)}</span>
+                        <span class="badge ${log.role === 'SYSTEM_ADMIN' ? 'badge-admin' : 'badge-scientist'}" style="font-size: 0.65rem; border: 1px solid rgba(0,0,0,0.05);">${escapeHtml((log.role || '').replace(/_/g, ' '))}</span>
+                        <span class="badge badge-viewer" style="font-size: 0.65rem; background: rgba(99, 102, 241, 0.05); color: var(--brand); border: 1px solid rgba(99, 102, 241, 0.1);">${escapeHtml(enterprise)}</span>
+                    </div>
+                    <div class="audit-time" style="font-weight: 600; color: #94a3b8;">${escapeHtml(dateStr)}</div>
+                </div>
+                <div class="audit-q" style="color: #334155; margin-bottom: 12px;">
+                    <b style="color: var(--brand); font-weight: 900; margin-right: 4px;">Q:</b> ${escapeHtml(log.question)}
+                </div>
+                <div style="font-size:0.75rem; color: #94a3b8; margin-bottom:12px; display: flex; align-items: center; gap: 4px;">
+                    <span class="icon" style="font-size:0.85rem;">🗄️</span> Database: <span style="font-weight: 700; color: #64748b;">${escapeHtml(log.db_name || 'Unknown')}</span>
+                </div>
+                <div class="audit-sql-container" style="border-radius: 12px; background: #fdfdff; border: 1px solid rgba(99, 102, 241, 0.06);">
+                    <div class="audit-sql-label" style="border-radius: 4px; border: 1px solid rgba(99,102,241,0.1); color: #94a3b8; font-weight: 900;">SQL</div>
+                    <pre class="audit-sql-code" style="color: #1e293b; line-height: 1.6;">${sql}</pre>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    if (meta) meta.textContent = `Showing ${visibleLogs.length} of ${filteredLogs.length} logs`;
+    if (btn) {
+        btn.style.display = filteredLogs.length > 5 ? 'inline-flex' : 'none';
+        btn.textContent = auditViewState.visibleCount >= filteredLogs.length ? 'Show less' : 'Show more';
+    }
+}
+
+function handleAuditFilterChange() {
+    auditViewState.filters.user = document.getElementById('auditUserFilter')?.value || '';
+    auditViewState.filters.enterprise = document.getElementById('auditEnterpriseFilter')?.value || '';
+    auditViewState.filters.role = document.getElementById('auditRoleFilter')?.value || '';
+    auditViewState.filters.search = document.getElementById('auditSearchFilter')?.value || '';
+    auditViewState.filters.startDate = document.getElementById('auditStartDateFilter')?.value || '';
+    auditViewState.filters.endDate = document.getElementById('auditEndDateFilter')?.value || '';
+    auditViewState.visibleCount = 5;
+    renderAuditLogs();
+}
+
+function resetAuditFilters() {
+    auditViewState.filters = { user: '', enterprise: '', role: '', search: '', startDate: '', endDate: '' };
+    ['auditUserFilter', 'auditEnterpriseFilter', 'auditRoleFilter', 'auditSearchFilter', 'auditStartDateFilter', 'auditEndDateFilter']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+    auditViewState.visibleCount = 5;
+    renderAuditLogs();
+}
+
+function toggleAuditVisible() {
+    const filteredLogs = getAuditFilteredLogs();
+    auditViewState.visibleCount = auditViewState.visibleCount >= filteredLogs.length ? 5 : filteredLogs.length;
+    renderAuditLogs();
+}
+
+function getFilteredAdminActions() {
+    return adminActionViewState.actions.filter(action => {
+        const enterprise = getEnterpriseLabel(action);
+        const target = [action.target_type, action.target_name].filter(Boolean).join(' / ') || '—';
+        const details = action.details ? JSON.stringify(action.details) : '';
+        const haystack = [action.admin_username, action.action_type, target, details, enterprise].join(' ').toLowerCase();
+        const search = adminActionViewState.filters.search.trim().toLowerCase();
+
+        return (!adminActionViewState.filters.user || action.admin_username === adminActionViewState.filters.user)
+            && (!adminActionViewState.filters.enterprise || enterprise === adminActionViewState.filters.enterprise)
+            && (!adminActionViewState.filters.action || action.action_type === adminActionViewState.filters.action)
+            && (!search || haystack.includes(search))
+            && matchesDateRange(action.timestamp, adminActionViewState.filters.startDate, adminActionViewState.filters.endDate);
+    });
+}
+
+function renderAdminActions() {
+    const tbody = document.getElementById('adminActionBody');
+    const meta = document.getElementById('adminActionMeta');
+    const btn = document.getElementById('adminActionSeeMoreBtn');
+    const filteredActions = getFilteredAdminActions();
+    const visibleActions = filteredActions.slice(0, adminActionViewState.visibleCount);
+
+    if (!filteredActions.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding: 32px;">No admin actions match the selected filters.</td></tr>';
+        if (meta) meta.textContent = 'Showing 0 actions';
+        if (btn) btn.style.display = 'none';
+        return;
+    }
+
+    tbody.innerHTML = visibleActions.map(action => `
+        <tr>
+            <td>${escapeHtml(new Date(action.timestamp).toLocaleString())}</td>
+            <td>${escapeHtml(action.admin_username)}</td>
+            <td>${escapeHtml(action.action_type)}</td>
+            <td>${escapeHtml([action.target_type, action.target_name, getEnterpriseLabel(action)].filter(Boolean).join(' / ') || '—')}</td>
+            <td>${escapeHtml(action.details ? JSON.stringify(action.details) : '—')}</td>
+        </tr>
+    `).join('');
+
+    if (meta) meta.textContent = `Showing ${visibleActions.length} of ${filteredActions.length} actions`;
+    if (btn) {
+        btn.style.display = filteredActions.length > 5 ? 'inline-flex' : 'none';
+        btn.textContent = adminActionViewState.visibleCount >= filteredActions.length ? 'Show less' : 'Show more';
+    }
+}
+
+function handleAdminActionFilterChange() {
+    adminActionViewState.filters.user = document.getElementById('adminActionUserFilter')?.value || '';
+    adminActionViewState.filters.enterprise = document.getElementById('adminActionEnterpriseFilter')?.value || '';
+    adminActionViewState.filters.action = document.getElementById('adminActionTypeFilter')?.value || '';
+    adminActionViewState.filters.search = document.getElementById('adminActionSearchFilter')?.value || '';
+    adminActionViewState.filters.startDate = document.getElementById('adminActionStartDateFilter')?.value || '';
+    adminActionViewState.filters.endDate = document.getElementById('adminActionEndDateFilter')?.value || '';
+    adminActionViewState.visibleCount = 5;
+    renderAdminActions();
+}
+
+function resetAdminActionFilters() {
+    adminActionViewState.filters = { user: '', enterprise: '', action: '', search: '', startDate: '', endDate: '' };
+    ['adminActionUserFilter', 'adminActionEnterpriseFilter', 'adminActionTypeFilter', 'adminActionSearchFilter', 'adminActionStartDateFilter', 'adminActionEndDateFilter']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+    adminActionViewState.visibleCount = 5;
+    renderAdminActions();
+}
+
+function toggleAdminActionsVisible() {
+    const filteredActions = getFilteredAdminActions();
+    adminActionViewState.visibleCount = adminActionViewState.visibleCount >= filteredActions.length ? 5 : filteredActions.length;
+    renderAdminActions();
+}
+
+function getFilteredSecurityEvents() {
+    return securityEventViewState.events.filter(event => {
+        const enterprise = getEnterpriseLabel(event);
+        const haystack = [
+            event.username,
+            event.event_type,
+            event.severity,
+            event.event_source,
+            event.resource_name,
+            enterprise
+        ].filter(Boolean).join(' ').toLowerCase();
+        const search = securityEventViewState.filters.search.trim().toLowerCase();
+
+        return (!securityEventViewState.filters.user || (event.username || 'Unknown') === securityEventViewState.filters.user)
+            && (!securityEventViewState.filters.enterprise || enterprise === securityEventViewState.filters.enterprise)
+            && (!securityEventViewState.filters.severity || (event.severity || '—') === securityEventViewState.filters.severity)
+            && (!securityEventViewState.filters.source || (event.event_source || '—') === securityEventViewState.filters.source)
+            && (!search || haystack.includes(search))
+            && matchesDateRange(event.timestamp, securityEventViewState.filters.startDate, securityEventViewState.filters.endDate);
+    });
+}
+
+function renderSecurityEvents() {
+    const tbody = document.getElementById('securityEventBody');
+    const meta = document.getElementById('securityEventMeta');
+    const btn = document.getElementById('securityEventSeeMoreBtn');
+    const filteredEvents = getFilteredSecurityEvents();
+    const visibleEvents = filteredEvents.slice(0, securityEventViewState.visibleCount);
+
+    if (!filteredEvents.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding: 32px;">No security events match the selected filters.</td></tr>';
+        if (meta) meta.textContent = 'Showing 0 events';
+        if (btn) btn.style.display = 'none';
+        return;
+    }
+
+    tbody.innerHTML = visibleEvents.map(event => `
+        <tr>
+            <td>${escapeHtml(new Date(event.timestamp).toLocaleString())}</td>
+            <td>${escapeHtml(event.username || 'Unknown')}</td>
+            <td>${escapeHtml(event.event_type)}</td>
+            <td>${escapeHtml(event.severity || '—')}</td>
+            <td>${escapeHtml(event.event_source || '—')}</td>
+            <td>${escapeHtml([event.resource_name || '—', getEnterpriseLabel(event)].filter(Boolean).join(' / '))}</td>
+        </tr>
+    `).join('');
+
+    if (meta) meta.textContent = `Showing ${visibleEvents.length} of ${filteredEvents.length} events`;
+    if (btn) {
+        btn.style.display = filteredEvents.length > 5 ? 'inline-flex' : 'none';
+        btn.textContent = securityEventViewState.visibleCount >= filteredEvents.length ? 'Show less' : 'Show more';
+    }
+    renderSecurityTrendChart(filteredEvents);
+}
+
+function handleSecurityFilterChange() {
+    securityEventViewState.filters.user = document.getElementById('securityUserFilter')?.value || '';
+    securityEventViewState.filters.enterprise = document.getElementById('securityEnterpriseFilter')?.value || '';
+    securityEventViewState.filters.severity = document.getElementById('securitySeverityFilter')?.value || '';
+    securityEventViewState.filters.source = document.getElementById('securitySourceFilter')?.value || '';
+    securityEventViewState.filters.search = document.getElementById('securitySearchFilter')?.value || '';
+    securityEventViewState.filters.startDate = document.getElementById('securityStartDateFilter')?.value || '';
+    securityEventViewState.filters.endDate = document.getElementById('securityEndDateFilter')?.value || '';
+    securityEventViewState.visibleCount = 5;
+    renderSecurityEvents();
+}
+
+function resetSecurityFilters() {
+    securityEventViewState.filters = { user: '', enterprise: '', severity: '', source: '', search: '', startDate: '', endDate: '' };
+    ['securityUserFilter', 'securityEnterpriseFilter', 'securitySeverityFilter', 'securitySourceFilter', 'securitySearchFilter', 'securityStartDateFilter', 'securityEndDateFilter']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+    securityEventViewState.visibleCount = 5;
+    renderSecurityEvents();
+}
+
+function toggleSecurityEventsVisible() {
+    const filteredEvents = getFilteredSecurityEvents();
+    securityEventViewState.visibleCount = securityEventViewState.visibleCount >= filteredEvents.length ? 5 : filteredEvents.length;
+    renderSecurityEvents();
 }
 
 async function saveRbac() {
@@ -1223,34 +3670,19 @@ async function loadAuditLogs() {
     const container = document.getElementById('auditLogContainer');
     if (!logs || !logs.length) {
         container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px">No logs found.</div>';
+        const meta = document.getElementById('auditLogMeta');
+        const btn = document.getElementById('auditLogSeeMoreBtn');
+        if (meta) meta.textContent = 'Showing 0 logs';
+        if (btn) btn.style.display = 'none';
         return;
     }
-    
-    container.innerHTML = logs.map(log => {
-        const date = new Date(log.timestamp);
-        const dateStr = date.toLocaleDateString() + ', ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        // Simple SQL keyword highlighting
-        const sql = (log.sql || '')
-            .replace(/\b(SELECT|FROM|WHERE|LEFT JOIN|JOIN|GROUP BY|ORDER BY|LIMIT|OFFSET|AS|ON)\b/g, '<span class="keyword">$1</span>');
 
-        return `
-            <div class="audit-log-item">
-                <div class="audit-header">
-                    <div class="audit-user-info">
-                        <span>${log.username}</span>
-                        <span class="badge ${log.role === 'SYSTEM_ADMIN' ? 'badge-admin' : 'badge-scientist'}" style="font-size: 0.65rem;">${log.role.replace(/_/g, ' ')}</span>
-                    </div>
-                    <div class="audit-time">${dateStr}</div>
-                </div>
-                <div class="audit-q"><b>Q:</b> ${log.question}</div>
-                <div class="audit-sql-container">
-                    <div class="audit-sql-label">SQL</div>
-                    <pre class="audit-sql-code">${sql}</pre>
-                </div>
-            </div>
-        `;
-    }).join('');
+    auditViewState.logs = logs;
+    auditViewState.visibleCount = 5;
+    hydrateSelect('auditUserFilter', logs.map(log => log.username), 'All users', auditViewState.filters.user);
+    hydrateSelect('auditEnterpriseFilter', logs.map(getEnterpriseLabel), 'All enterprises', auditViewState.filters.enterprise);
+    hydrateSelect('auditRoleFilter', logs.map(log => log.role), 'All roles', auditViewState.filters.role);
+    renderAuditLogs();
 }
 
 async function loadAdminActions() {
@@ -1258,18 +3690,19 @@ async function loadAdminActions() {
     const tbody = document.getElementById('adminActionBody');
     if (!actions || !actions.length) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding: 32px;">No admin actions recorded.</td></tr>';
+        const meta = document.getElementById('adminActionMeta');
+        const btn = document.getElementById('adminActionSeeMoreBtn');
+        if (meta) meta.textContent = 'Showing 0 actions';
+        if (btn) btn.style.display = 'none';
         return;
     }
 
-    tbody.innerHTML = actions.map(action => `
-        <tr>
-            <td>${new Date(action.timestamp).toLocaleString()}</td>
-            <td>${action.admin_username}</td>
-            <td>${action.action_type}</td>
-            <td>${[action.target_type, action.target_name].filter(Boolean).join(' / ') || '—'}</td>
-            <td>${action.details ? JSON.stringify(action.details) : '—'}</td>
-        </tr>
-    `).join('');
+    adminActionViewState.actions = actions;
+    adminActionViewState.visibleCount = 5;
+    hydrateSelect('adminActionUserFilter', actions.map(action => action.admin_username), 'All admins', adminActionViewState.filters.user);
+    hydrateSelect('adminActionEnterpriseFilter', actions.map(getEnterpriseLabel), 'All enterprises', adminActionViewState.filters.enterprise);
+    hydrateSelect('adminActionTypeFilter', actions.map(action => action.action_type), 'All actions', adminActionViewState.filters.action);
+    renderAdminActions();
 }
 
 async function loadSecurityEvents() {
@@ -1277,19 +3710,20 @@ async function loadSecurityEvents() {
     const tbody = document.getElementById('securityEventBody');
     if (!events || !events.length) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding: 32px;">No security events recorded.</td></tr>';
+        const meta = document.getElementById('securityEventMeta');
+        const btn = document.getElementById('securityEventSeeMoreBtn');
+        if (meta) meta.textContent = 'Showing 0 events';
+        if (btn) btn.style.display = 'none';
         return;
     }
 
-    tbody.innerHTML = events.map(event => `
-        <tr>
-            <td>${new Date(event.timestamp).toLocaleString()}</td>
-            <td>${event.username || 'Unknown'}</td>
-            <td>${event.event_type}</td>
-            <td>${event.severity || '—'}</td>
-            <td>${event.event_source || '—'}</td>
-            <td>${event.resource_name || '—'}</td>
-        </tr>
-    `).join('');
+    securityEventViewState.events = events;
+    securityEventViewState.visibleCount = 5;
+    hydrateSelect('securityUserFilter', events.map(event => event.username || 'Unknown'), 'All users', securityEventViewState.filters.user);
+    hydrateSelect('securityEnterpriseFilter', events.map(getEnterpriseLabel), 'All enterprises', securityEventViewState.filters.enterprise);
+    hydrateSelect('securitySeverityFilter', events.map(event => event.severity || '—'), 'All severities', securityEventViewState.filters.severity);
+    hydrateSelect('securitySourceFilter', events.map(event => event.event_source || '—'), 'All sources', securityEventViewState.filters.source);
+    renderSecurityEvents();
 }
 
 async function loadPolicyAnalytics() {
@@ -1297,9 +3731,9 @@ async function loadPolicyAnalytics() {
     if (!data) return;
 
     document.getElementById('policySummary').innerHTML = `
-        <div class="mini-card"><div class="label">Total Denials</div><div class="value">${data.summary.total_denials || 0}</div></div>
-        <div class="mini-card"><div class="label">Affected Users</div><div class="value">${data.summary.unique_users || 0}</div></div>
-        <div class="mini-card"><div class="label">Blocked Resources</div><div class="value">${data.summary.unique_resources || 0}</div></div>
+        <div class="mini-card shadow-sm" style="border-left: 4px solid var(--danger);"><div class="label">Total Denials</div><div class="value" style="color: var(--danger);">${data.summary.total_denials || 0}</div></div>
+        <div class="mini-card shadow-sm" style="border-left: 4px solid var(--warning);"><div class="label">Affected Users</div><div class="value" style="color: var(--warning);">${data.summary.unique_users || 0}</div></div>
+        <div class="mini-card shadow-sm" style="border-left: 4px solid var(--brand);"><div class="label">Blocked Resources</div><div class="value" style="color: var(--brand);">${data.summary.unique_resources || 0}</div></div>
     `;
 
     document.getElementById('policyResourcesBox').innerHTML = renderSimpleList(data.blocked_resources, 'No blocked resources yet.');
@@ -1311,9 +3745,9 @@ async function loadSloPanel() {
     if (!data) return;
 
     document.getElementById('sloSummary').innerHTML = `
-        <div class="mini-card"><div class="label">Requests</div><div class="value">${data.summary.requests || 0}</div></div>
-        <div class="mini-card"><div class="label">Success Rate</div><div class="value">${data.summary.success_rate || 0}%</div></div>
-        <div class="mini-card"><div class="label">Avg Total</div><div class="value">${Number(data.summary.avg_total_s || 0).toFixed(2)} s</div></div>
+        <div class="mini-card shadow-sm" style="border-left: 4px solid var(--brand);"><div class="label">Requests</div><div class="value" style="color: var(--brand);">${data.summary.requests || 0}</div></div>
+        <div class="mini-card shadow-sm" style="border-left: 4px solid var(--success);"><div class="label">Success Rate</div><div class="value" style="color: var(--success);">${data.summary.success_rate || 0}%</div></div>
+        <div class="mini-card shadow-sm" style="border-left: 4px solid #3b82f6;"><div class="label">Avg Total</div><div class="value" style="color: #3b82f6;">${Number(data.summary.avg_total_s || 0).toFixed(2)}s</div></div>
     `;
 
     const tbody = document.getElementById('sloStageBody');
@@ -1326,23 +3760,23 @@ async function loadSloPanel() {
     };
     tbody.innerHTML = Object.entries(data.stages || {}).map(([key, value]) => `
         <tr>
-            <td>${stageLabels[key] || key}</td>
-            <td>${Number(value.p50_s || 0).toFixed(2)} s</td>
-            <td>${Number(value.p95_s || 0).toFixed(2)} s</td>
-            <td>${Number(value.avg_s || 0).toFixed(2)} s</td>
-            <td>${Number(value.success_rate || 0).toFixed(1)}%</td>
+            <td><span style="font-weight: 800; color: #1e293b; font-size: 0.92rem;">${stageLabels[key] || key}</span></td>
+            <td>${formatLatencyBadge((value.p50_s || 0) * 1000, key)}</td>
+            <td>${formatLatencyBadge((value.p95_s || 0) * 1000, key)}</td>
+            <td>${formatLatencyBadge((value.avg_s || 0) * 1000, key)}</td>
+            <td><span class="latency-badge ${value.success_rate >= 95 ? 'badge-fast' : (value.success_rate >= 80 ? 'badge-medium' : 'badge-slow')}">${Number(value.success_rate || 0).toFixed(1)}%</span></td>
         </tr>
     `).join('') || '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding: 24px;">No SLO metrics available.</td></tr>';
 }
 
 function renderSimpleList(items, emptyMessage) {
     if (!items || !items.length) {
-        return `<div style="color:var(--text-muted); font-size:0.9rem;">${emptyMessage}</div>`;
+        return `<div style="color:var(--text-muted); font-size:0.9rem;">${escapeHtml(emptyMessage)}</div>`;
     }
     return items.map(item => `
-        <div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border);">
-            <span>${item.name}</span>
-            <b>${item.count}</b>
+        <div style="display:flex; justify-content:space-between; align-items: center; padding:12px 0; border-bottom:1px solid rgba(99, 102, 241, 0.06);">
+            <span style="font-weight: 700; color: #475569; font-size: 0.88rem;">${escapeHtml(item.name)}</span>
+            <span class="badge" style="background: rgba(99, 102, 241, 0.05); color: var(--brand); font-weight: 800;">${item.count}</span>
         </div>
     `).join('');
 }
@@ -1358,12 +3792,43 @@ async function loadObservability() {
 
     renderObservabilityAlerts(data.alerts || []);
     renderObservabilityStages(data.stages || {});
-    renderObservabilityEvents(data.recent_events || []);
+    observabilityState.events = data.recent_events || [];
+    observabilityState.visibleCount = 20;
+    populateObservabilityUserFilter(observabilityState.events);
+    renderObservabilityEvents();
 }
 
 function formatLatencySeconds(valueMs) {
     const ms = Number(valueMs || 0);
     return `${(ms / 1000).toFixed(2)} s`;
+}
+
+function formatLatencyBadge(valueMs, stage = 'default') {
+    const ms = Number(valueMs || 0);
+    const secs = ms / 1000;
+    const formatted = secs.toFixed(2) + 's';
+    
+    const thresholds = {
+        'sql_gen': [3.0, 8.0],
+        'db_exec': [1.0, 3.0],
+        'summary': [2.0, 4.0],
+        'viz': [1.5, 3.0],
+        'total': [7.5, 18.0],
+        'default': [2.0, 5.0]
+    };
+    const [warn, bad] = thresholds[stage] || thresholds['default'];
+    
+    let badgeClass = 'badge-fast';
+    let icon = '⚡';
+    if (secs >= bad) {
+        badgeClass = 'badge-slow';
+        icon = '⚠️';
+    } else if (secs >= warn) {
+        badgeClass = 'badge-medium';
+        icon = '⏱️';
+    }
+    
+    return `<span class="latency-badge ${badgeClass}"><span class="latency-icon">${icon}</span><span class="latency-value">${formatted}</span></span>`;
 }
 
 function renderObservabilityAlerts(alerts) {
@@ -1380,8 +3845,8 @@ function renderObservabilityAlerts(alerts) {
 
     container.innerHTML = alerts.map(alert => `
         <div class="obs-alert-item ${alert.severity}">
-            <div class="obs-alert-title">${(alert.stage || 'system').toUpperCase()} · ${alert.severity.toUpperCase()}</div>
-            <div class="obs-alert-copy">${alert.message}</div>
+            <div class="obs-alert-title">${escapeHtml((alert.stage || 'system').toUpperCase())} · ${escapeHtml(alert.severity.toUpperCase())}</div>
+            <div class="obs-alert-copy">${escapeHtml(alert.message)}</div>
         </div>
     `).join('');
 }
@@ -1399,76 +3864,180 @@ function renderObservabilityStages(stages) {
     container.innerHTML = keys.map(key => {
         const stage = stages[key] || { avg_ms: 0, p95_ms: 0, max_ms: 0, spike_count: 0 };
         return `
-            <div class="obs-stage-card">
-                <h4>${labels[key]}</h4>
-                <div class="obs-stage-meta">
-                    <div>Average: <b>${formatLatencySeconds(stage.avg_ms)}</b></div>
-                    <div>P95: <b>${formatLatencySeconds(stage.p95_ms)}</b></div>
-                    <div>Max: <b>${formatLatencySeconds(stage.max_ms)}</b></div>
-                    <div>Spikes: <b>${stage.spike_count}</b></div>
+            <div class="obs-stage-card" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(99,102,241,0.08); border-radius: 16px; padding: 20px; box-shadow: var(--shadow-sm); border-left: 4px solid var(--brand);">
+                <h4 style="margin-bottom: 12px; font-weight: 800; color: #1e293b; font-size: 0.9rem;">${labels[key]}</h4>
+                <div class="obs-stage-meta" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; font-size: 0.82rem;">
+                    <div><span style="color: #64748b; font-weight: 600;">Avg:</span> <b style="color: #0f172a;">${formatLatencySeconds(stage.avg_ms)}</b></div>
+                    <div><span style="color: #64748b; font-weight: 600;">P95:</span> <b style="color: #0f172a;">${formatLatencySeconds(stage.p95_ms)}</b></div>
+                    <div><span style="color: #64748b; font-weight: 600;">Max:</span> <b style="color: #0f172a;">${formatLatencySeconds(stage.max_ms)}</b></div>
+                    <div><span style="color: #64748b; font-weight: 600;">Spikes:</span> <b style="color: ${stage.spike_count > 0 ? '#ef4444' : '#0f172a'};">${stage.spike_count}</b></div>
                 </div>
             </div>
         `;
     }).join('');
 }
 
-function renderObservabilityEvents(events) {
+function populateObservabilityUserFilter(events) {
+    const select = document.getElementById('obsUserFilter');
+    if (!select) return;
+    const current = observabilityState.filters.username;
+    const users = Array.from(new Set((events || []).map(event => event.username).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    select.innerHTML = '<option value="">All users</option>' + users.map(user => `<option value="${escapeHtml(user)}">${escapeHtml(user)}</option>`).join('');
+    select.value = current;
+}
+
+function getObservabilityStatusKey(event) {
+    if (event.had_rate_limit) return 'rate_limit';
+    if (!event.success || event.error_stage) return 'error';
+    return 'healthy';
+}
+
+function getFilteredObservabilityEvents() {
+    return observabilityState.events.filter(event => {
+        const userOk = !observabilityState.filters.username || event.username === observabilityState.filters.username;
+        const statusOk = !observabilityState.filters.status || getObservabilityStatusKey(event) === observabilityState.filters.status;
+
+        let dateOk = true;
+        const eventDate = new Date(event.timestamp);
+        if (observabilityState.filters.startDate) {
+            const start = new Date(`${observabilityState.filters.startDate}T00:00:00`);
+            dateOk = dateOk && eventDate >= start;
+        }
+        if (observabilityState.filters.endDate) {
+            const end = new Date(`${observabilityState.filters.endDate}T23:59:59`);
+            dateOk = dateOk && eventDate <= end;
+        }
+        return userOk && statusOk && dateOk;
+    });
+}
+
+function handleObservabilityFilterChange() {
+    observabilityState.filters.username = document.getElementById('obsUserFilter')?.value || '';
+    observabilityState.filters.status = document.getElementById('obsStatusFilter')?.value || '';
+    observabilityState.filters.startDate = document.getElementById('obsStartDateFilter')?.value || '';
+    observabilityState.filters.endDate = document.getElementById('obsEndDateFilter')?.value || '';
+    observabilityState.visibleCount = 20;
+    renderObservabilityEvents();
+}
+
+function resetObservabilityFilters() {
+    observabilityState.filters = { username: '', status: '', startDate: '', endDate: '' };
+    const user = document.getElementById('obsUserFilter');
+    const status = document.getElementById('obsStatusFilter');
+    const start = document.getElementById('obsStartDateFilter');
+    const end = document.getElementById('obsEndDateFilter');
+    if (user) user.value = '';
+    if (status) status.value = '';
+    if (start) start.value = '';
+    if (end) end.value = '';
+    observabilityState.visibleCount = 20;
+    renderObservabilityEvents();
+}
+
+function toggleObservabilityVisible() {
+    const filtered = getFilteredObservabilityEvents();
+    observabilityState.visibleCount = observabilityState.visibleCount >= filtered.length ? 20 : filtered.length;
+    renderObservabilityEvents();
+}
+
+function renderObservabilityEvents() {
     const tbody = document.getElementById('observabilityEventsBody');
-    if (!events.length) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--text-muted); padding: 32px;">No telemetry events yet.</td></tr>';
+    const meta = document.getElementById('observabilityEventsMeta');
+    const seeMoreBtn = document.getElementById('observabilitySeeMoreBtn');
+    const filteredEvents = getFilteredObservabilityEvents();
+    const visibleEvents = filteredEvents.slice(0, observabilityState.visibleCount);
+
+    if (!filteredEvents.length) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:var(--text-muted); padding: 32px;">No telemetry events yet.</td></tr>';
+        if (meta) meta.textContent = 'Showing 0 incidents';
+        if (seeMoreBtn) seeMoreBtn.style.display = 'none';
         return;
     }
 
-    tbody.innerHTML = events.map(event => {
+    tbody.innerHTML = visibleEvents.map(event => {
         const date = new Date(event.timestamp);
         const providerLabel = [event.llm_provider, event.llm_model].filter(Boolean).join(' / ') || 'Unknown';
         const statusParts = [];
         if (event.had_rate_limit) statusParts.push(`429 @ ${event.rate_limit_stage || 'unknown'}`);
         if (event.error_stage) statusParts.push(`Error @ ${event.error_stage}`);
         if (!statusParts.length) statusParts.push(event.success ? 'Healthy' : 'Failed');
+
+        let statusClass = 'healthy';
+        if (event.had_rate_limit) {
+            statusClass = 'rate-limit';
+        } else if (!event.success || event.error_stage) {
+            statusClass = 'error';
+        }
         return `
             <tr>
-                <td>${date.toLocaleString()}</td>
-                <td>${event.username}</td>
-                <td>${providerLabel}</td>
-                <td>${formatLatencySeconds(event.sql_gen_ms)}</td>
-                <td>${formatLatencySeconds(event.db_exec_ms)}</td>
-                <td>${formatLatencySeconds(event.summary_ms)}</td>
-                <td>${formatLatencySeconds(event.viz_ms)}</td>
-                <td>${formatLatencySeconds(event.total_ms)}</td>
-                <td>${statusParts.join(' · ')}</td>
+                <td>
+                    <div style="display: flex; flex-direction: column;">
+                        <span style="font-weight: 700; color: #1e293b; font-size: 0.88rem;">${date.toLocaleDateString()}</span>
+                        <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 600; text-transform: uppercase;">${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                </td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 32px; height: 32px; background: linear-gradient(135deg, #f1f5f9, #e2e8f0); border: 1px solid rgba(99,102,241,0.1); border-radius: 8px; display: grid; place-items: center; font-size: 0.75rem; color: var(--brand); font-weight: 800;">
+                            ${event.username.substring(0, 1).toUpperCase()}
+                        </div>
+                        <span style="font-weight: 800; color: #0f172a; font-size: 0.9rem;">${escapeHtml(event.username)}</span>
+                    </div>
+                </td>
+                <td>
+                    <div style="display:flex; flex-direction:column; gap:4px; min-width: 260px; max-width: 320px;">
+                        <span style="font-weight: 700; color: #0f172a; font-size: 0.84rem; line-height: 1.4;">${escapeHtml(event.question || 'No question captured')}</span>
+                        <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 600;">${escapeHtml(event.db_name || 'Unknown DB')}</span>
+                    </div>
+                </td>
+                <td><span style="font-weight: 700; color: #334155; font-size: 0.85rem;">${escapeHtml(providerLabel)}</span></td>
+                <td>${formatLatencyBadge(event.sql_gen_ms, 'sql_gen')}</td>
+                <td>${formatLatencyBadge(event.db_exec_ms, 'db_exec')}</td>
+                <td>${formatLatencyBadge(event.summary_ms, 'summary')}</td>
+                <td>${formatLatencyBadge((event.sql_gen_ms || 0) + (event.db_exec_ms || 0) + (event.summary_ms || 0), 'total')}</td>
+                <td>
+                    <span class="badge ${event.success ? 'badge-analyst' : 'badge-admin'}" style="padding: 6px 14px; font-weight: 800; text-transform: uppercase; font-size: 0.65rem; border-radius: 20px;">
+                        ${escapeHtml(statusParts.join(' ⚡ ')) }
+                    </span>
+                </td>
             </tr>
         `;
     }).join('');
+
+    if (meta) {
+        meta.textContent = `Showing ${visibleEvents.length} of ${filteredEvents.length} incidents`;
+    }
+    if (seeMoreBtn) {
+        if (filteredEvents.length > 20) {
+            seeMoreBtn.style.display = 'inline-flex';
+            seeMoreBtn.textContent = observabilityState.visibleCount >= filteredEvents.length ? 'Show less' : 'See more';
+        } else {
+            seeMoreBtn.style.display = 'none';
+        }
+    }
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 async function apiFetch(url, method = 'GET', body = null) {
     try {
-        // Keep admin and workspace on the same active session context.
-        // Workspace stores session id in sessionStorage, so prefer that first.
-        let sessionId = sessionStorage.getItem('sql_agent_session_id') || localStorage.getItem('sql_agent_session_id');
-        if (!sessionId) {
-            sessionId = 'sess_' + Math.random().toString(36).substring(2) + '_' + Date.now();
-            sessionStorage.setItem('sql_agent_session_id', sessionId);
-            localStorage.setItem('sql_agent_session_id', sessionId);
-        } else {
-            // Backfill both stores to prevent drift between pages.
-            sessionStorage.setItem('sql_agent_session_id', sessionId);
-            localStorage.setItem('sql_agent_session_id', sessionId);
-        }
+        const sessionId = getAdminSessionId();
+        const user = getCurrentUser();
         
         const opts = { 
             method, 
-            headers: { 
-                'Content-Type': 'application/json', 
-                'X-Auth-Token': token,
+            headers: {
+                'Content-Type': 'application/json',
                 'X-Session-ID': sessionId
-            } 
+            },
+            credentials: 'same-origin'
         };
+        if (user && user.token) {
+            opts.headers['X-Auth-Token'] = user.token;
+        }
         if (body) opts.body = JSON.stringify(body);
         const res = await fetch(url, opts);
-        if (res.status === 401 || res.status === 403) { logout(); return null; }
+        if (res.status === 401) { logout(`Error ${res.status}`); return null; }
+        if (res.status === 403) { showAlert('You do not have permission for this action.', 'warning'); return null; }
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             showAlert(err.detail || `Error ${res.status}`, 'error');
@@ -1481,26 +4050,117 @@ async function apiFetch(url, method = 'GET', body = null) {
     }
 }
 
+/**
+ * Premium Global Toast Notification System
+ * Merged with legacy showAlert to maintain compatibility
+ */
 function showAlert(msg, type = 'success') {
-    const el = document.getElementById('globalAlert');
-    el.textContent = msg;
-    el.className = `alert alert-${type} show`;
-    setTimeout(() => el.classList.remove('show'), 4000);
+    const container = document.getElementById('toast-container');
+    if (!container) return console.warn('Toast container not found');
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    let icon = '🔔';
+    if (type === 'success') icon = '✅';
+    if (type === 'error') icon = '❌';
+    if (type === 'warning') icon = '⚠️';
+
+    toast.innerHTML = `
+        <div class="toast-icon">${icon}</div>
+        <div class="toast-content">
+            <div class="toast-message">${msg}</div>
+        </div>
+    `;
+
+    container.appendChild(toast);
+
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 400);
+    }, 4000);
 }
 
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
-function logout() {
-    localStorage.removeItem('sql_agent_token');
+function logout(reason = 'Unauthorized') {
+    console.error("Logging out. Reason:", reason);
+    if (reason !== 'Manual') showAlert("Session expired or unauthorized: " + reason, 'warning');
+    sessionStorage.removeItem('sql_agent_user');
+    sessionStorage.removeItem('sql_agent_session_id');
     localStorage.removeItem('sql_agent_user');
+    localStorage.removeItem('sql_agent_session_id');
     window.location.href = '/login';
+}
+
+/**
+ * Premium Global Confirmation Modal
+ * @param {string} title - The modal title
+ * @param {string} message - The confirmation message
+ * @param {function} onConfirm - Callback for confirm action
+ */
+function showConfirmationModal(title, message, onConfirm) {
+    const overlay = document.getElementById('confirm-modal-overlay');
+    const titleEl = document.getElementById('confirm-modal-title');
+    const msgEl = document.getElementById('confirm-modal-message');
+    const confirmBtn = document.getElementById('confirm-modal-confirm');
+    const cancelBtn = document.getElementById('confirm-modal-cancel');
+
+    if (!overlay || !titleEl || !msgEl || !confirmBtn || !cancelBtn) {
+        console.warn('Confirm modal components not found');
+        return;
+    }
+
+    titleEl.innerText = title;
+    msgEl.innerText = message;
+    overlay.classList.add('open');
+
+    // Clean up previous listeners
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    const newCancelBtn = cancelBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+
+    const close = () => overlay.classList.remove('open');
+
+    newConfirmBtn.onclick = () => {
+        close();
+        if (onConfirm) onConfirm();
+    };
+
+    newCancelBtn.onclick = close;
+    overlay.onclick = (e) => { if (e.target === overlay) close(); };
 }
 
 // Close modals on overlay click
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
 });
+
+document.addEventListener('visibilitychange', () => {
+    const panel = document.getElementById('tab-observability');
+    if (!document.hidden && panel && panel.classList.contains('active')) {
+        loadObservability();
+    }
+});
 </script>
+    <div id="toast-container"></div>
+    <div id="confirm-modal-overlay" class="confirm-modal-overlay">
+        <div class="confirm-modal">
+            <div class="confirm-modal-header">
+                <div class="confirm-modal-icon">?</div>
+                <div class="confirm-modal-title" id="confirm-modal-title">Confirm Action</div>
+            </div>
+            <div class="confirm-modal-body">
+                <p class="confirm-modal-message" id="confirm-modal-message">Are you sure you want to proceed?</p>
+            </div>
+            <div class="confirm-modal-footer">
+                <button class="btn btn-cancel" id="confirm-modal-cancel">Cancel</button>
+                <button class="btn btn-confirm" id="confirm-modal-confirm">Confirm</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

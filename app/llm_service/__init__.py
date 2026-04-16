@@ -3,7 +3,8 @@ from app.llm_service.llm_service import (
     generate_summary, 
     extract_structured_memory, 
     LLMError,
-    analyze_visualization_intent
+    analyze_visualization_intent,
+    explain_sql
 )
 
 __all__ = [
@@ -11,5 +12,6 @@ __all__ = [
     'generate_summary', 
     'extract_structured_memory', 
     'LLMError',
-    'analyze_visualization_intent'
+    'analyze_visualization_intent',
+    'explain_sql'
 ]

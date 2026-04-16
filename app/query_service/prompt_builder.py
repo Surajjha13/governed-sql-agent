@@ -1,11 +1,11 @@
-
+import re
 from typing import Dict, Any, List
 from app.schema_service.models import SchemaResponse
 
 # --- TEMPLATES ---
 
-SQL_GENERATION_TEMPLATE = """You are a highly secure, read-only SQL expert.
-Your task is to convert the user's natural language question into a standard SQL query for the provided schema.
+SQL_GENERATION_TEMPLATE = """You are a highly secure, read-only SQL expert for PostgreSQL.
+Convert user questions into standard SQL for the provided schema.
 
 CONVERSATION HISTORY:
 {history}
@@ -13,45 +13,101 @@ CONVERSATION HISTORY:
 DATABASE SCHEMA:
 {schema}
 
-BUSINESS METRICS (Use these canonical definitions if applicable):
-{metrics}
+JOIN PATH:
+{join_path}
 
-SEMANTIC SEARCH HITS (Relevant columns/terms found via vector search):
+BUSINESS METRICS & VECTOR CONTEXT:
+{metrics}
 {vector_context}
 
-RULES:
-1. Generate ONLY the raw SQL wrapped in Markdown code blocks (```sql ... ```).
-2. LIMIT the results to 10 rows automatically if not specified.
-3. ALLOWED: SELECT.
-4. FORBIDDEN: INSERT, UPDATE, DELETE, DROP, ALTER, GRANT.
-5. If the user asks for something not in the schema, answer "I cannot answer this question based on the available data".
-6. CRITICAL: Postgres is case-sensitive. You MUST double-quote ALL table names and column names exactly as they appear in the schema (e.g. "Users"."UserID", not Users.UserID).
-7. FORBIDDEN: Any request for "all" columns, "everything", or "select *". If the user asks for all data or uses a "select *" pattern, you MUST NOT expand it. Instead, you MUST answer: "For security and performance reasons, please specify the columns you need individually rather than requesting 'all' or '*'."
-8. PERFORMANCE: 
-   - Use window functions (ROW_NUMBER(), RANK()) for "Top N per group" or "running totals".
-   - Use CTEs (WITH) for complex logic reuse or pre-aggregation.
-   - Use subqueries to push down filters before joins when it reduces row counts.
-   - Prefer indexed keys for joins and filters.
-9. FORBIDDEN: Select * and select all. If the user asks for these, explain that it is for security and performance reasons.
-10. FORBIDDEN: Session-level or management commands such as CONNECT, SET, USE, or BEGIN. The database connection is already established. Do not attempt to specify the database names or search paths.
-11. READABILITY: When the user asks about entities (e.g. categories, products, customers), you MUST prioritize selecting and grouping by descriptive "Name" columns (e.g. "CategoryName", "ProductName") rather than just ID columns. Join the necessary tables to retrieve these descriptive attributes.
-12. AGGREGATIONS: For questions like "most common", "least common", "frequency", "distribution", "count by", or "how many per", you MUST generate an aggregate query using explicit columns, GROUP BY, COUNT(*), and ORDER BY the aggregate. Never use SELECT * for these questions.
+CRITICAL RULES:
+1. USE EXACT TABLE NAMES from the schema. Do not pluralize or guess.
+2. SELECT ONLY. Forbidden: INSERT, UPDATE, DELETE, DROP, ALTER, GRANT.
+3. QUOTING: Double-quote ALL table and column names (e.g., "Users"."UserID").
+4. LIMITS: Do NOT use LIMIT/TOP unless the user asks for a specific count (e.g., "Top 5").
+5. READABILITY: When querying entities (users, products), you MUST join to get human-readable names; never return raw IDs alone.
+6. NO SELECT *: Specify columns individually. For "everything" requests, pick 5-7 descriptive columns.
+7. AGGREGATES: For "how many", "most common", etc., use GROUP BY, COUNT(*), and ORDER BY.
+8. If the request is analytically ambiguous but the schema supports a reasonable interpretation, make the best safe assumption and generate SQL anyway. For example, phrases like "suddenly increased", "spike", or "dropped sharply" should be interpreted using available date/time and amount columns, such as comparing recent periods or ranking period-over-period change.
+9. Only refuse with "I cannot answer this question based on the available data" when the schema truly lacks the fields needed to answer even approximately.
+
+OUTPUT FORMAT:
+### Reasoning
+- Tables: <tables>
+- Logic: <brief explanation>
+### SQL
+```sql
+<query>
+```
 
 Question: {question}
+Response:"""
 
-SQL Query:"""
+MYSQL_SQL_GENERATION_TEMPLATE = """You are a highly secure, read-only SQL expert for MySQL.
+Convert user questions into standard SQL for the provided schema.
 
-SUMMARY_TEMPLATE = """You are a highly efficient Data Analyst. 
+CONVERSATION HISTORY:
+{history}
+
+DATABASE SCHEMA:
+{schema}
+
+JOIN PATH:
+{join_path}
+
+BUSINESS METRICS & VECTOR CONTEXT:
+{metrics}
+{vector_context}
+
+CRITICAL RULES:
+1. USE EXACT TABLE NAMES from the schema.
+2. SELECT ONLY. Forbidden: INSERT, UPDATE, DELETE, DROP, ALTER, GRANT.
+3. QUOTING: Use backticks (`) for ALL table and column names (e.g., `Users`.`UserID`).
+4. LIMITS: Do NOT use LIMIT unless the user asks for a specific count.
+5. READABILITY: Join to get human-readable names; never return raw IDs alone.
+6. NO SELECT *: Specify columns individually.
+7. AGGREGATES: For "most common", etc., use GROUP BY, COUNT(*), and ORDER BY.
+8. If the request is analytically ambiguous but the schema supports a reasonable interpretation, make the best safe assumption and generate SQL anyway. For example, phrases like "suddenly increased", "spike", or "dropped sharply" should be interpreted using available date/time and amount columns, such as comparing recent periods or ranking period-over-period change.
+9. Only refuse with "I cannot answer this question based on the available data" when the schema truly lacks the fields needed to answer even approximately.
+
+OUTPUT FORMAT:
+### Reasoning
+- Tables: <tables>
+- Logic: <explanation>
+### SQL
+```sql
+<query>
+```
+
+Question: {question}
+Response:"""
+
+
+SUMMARY_TEMPLATE = """You are a sharp business analyst delivering an executive-level insight.
 The user asked: "{question}"
-The database returned this data:
+Total records matched: {total_records}
+Preview data (up to 10 rows):
 {data}
 
-Provide a concise, high-impact summary of the results:
-- **Accuracy First**: Directly address the user's question with specific numbers from the data.
-- **Bolding**: You MUST **bold** all specific numbers, percentages, dates, and the most important insights.
-- **Conciseness**: Keep the response to 2-3 short, impactful paragraphs. Max 150 words.
-- **No Fluff**: Avoid generic intro phrases.
-- **Insightful**: Point out the single most important trend or "winner" clearly."""
+Respond with a SHORT, BUSINESS-FOCUSED insight following these rules:
+- **Lead with the "so what"**: Open with the most important business takeaway, not a description of what the data contains.
+- **Be specific**: **Bold** every key number, name, date, or percentage that matters.
+- **Surface the top finding**: Call out the clear winner, outlier, trend, or risk in 1 sentence.
+- **Actionable where possible**: If the data implies an action or decision, state it in plain language.
+- **Max 60 words total.** No fluff, no row-count commentary, no mention of "preview" or "records returned".
+- Do NOT start with "The data shows", "Based on the results", or similar filler phrases."""
+
+EXPLAIN_TEMPLATE = """You are a technical translator.
+The user asked: "{question}"
+And the system structurally produced this exact SQL to solve it:
+```sql
+{sql}
+```
+
+Task:
+Explain to a non-technical user EXACTLY how this SQL calculates their answer in 1 to 2 plain English sentences.
+Do NOT use technical words like "JOIN", "GROUP BY", "CTE", "AS", or "LEFT OUTER".
+Start directly without any introductory conversational filler like "This query calculates...". Focus purely on the data logic (e.g., "To find this, we checked all inventory items, filtered out the broken ones, and added up their total cost.")"""
 
 
 def build_prompt(
@@ -59,7 +115,9 @@ def build_prompt(
     context: Dict[str, Any],
     full_schema: SchemaResponse,
     history: List[Dict[str, str]] = None,
-    vector_candidates: List[Dict] = None
+    vector_candidates: List[Dict] = None,
+    intent_pattern: str = "Standard logic applies.",
+    engine: str = "postgres"
 ) -> str:
     """
     Generate a high-quality prompt for the LLM using retrieved schema context, 
@@ -70,17 +128,20 @@ def build_prompt(
     history_str = "No previous context."
     if history:
         history_lines = []
-        for msg in history[-5:]: # Keep last 5 turns
+        for msg in history[-3:]: # Keep last 3 turns
             history_lines.append(f"User: {msg['user']}")
             history_lines.append(f"Assistant: {msg['assistant']}")
         history_str = "\n".join(history_lines)
 
     # 2. Format schema based on context
+    is_mysql = engine.lower() == "mysql"
+    q = "`" if is_mysql else "\""
+    
     selected_tables = [t for t in full_schema.tables if t.table in context["tables"]]
     
     schema_lines = []
     for table in selected_tables:
-        schema_lines.append(f"Table: \"{table.table}\"")
+        schema_lines.append(f"Table: {q}{table.table}{q}")
         context_cols = context["columns"].get(table.table, [])
         
         schema_lines.append("Columns:")
@@ -89,16 +150,14 @@ def build_prompt(
                 pk_mark = " (PK)" if col.is_primary_key else ""
                 fk_mark = f" (FK -> {col.foreign_key})" if col.foreign_key else ""
                 desc = f" - {col.description}" if col.description else ""
-                schema_lines.append(f"  - \"{col.name}\" ({col.data_type}){pk_mark}{fk_mark}{desc}")
-        schema_lines.append("")
-
-    if context.get("joins"):
-        schema_lines.append("Suggested Joins:")
-        for join in context["joins"]:
-            schema_lines.append(f"- {join}")
+                schema_lines.append(f"  - {q}{col.name}{q} ({col.data_type}){pk_mark}{fk_mark}{desc}")
         schema_lines.append("")
 
     schema_str = "\n".join(schema_lines)
+    
+    join_path_str = "No specific join path identified."
+    if context.get("joins"):
+        join_path_str = "\n".join(f"- {join}" for join in context["joins"])
 
     # 3. Format Metrics
     metrics_lines = []
@@ -121,39 +180,67 @@ def build_prompt(
     
     vector_str = "\n".join(vector_lines) if vector_lines else "No semantic hints available."
 
-    return SQL_GENERATION_TEMPLATE.format(
+    template = MYSQL_SQL_GENERATION_TEMPLATE if is_mysql else SQL_GENERATION_TEMPLATE
+
+    return template.format(
         history=history_str,
         schema=schema_str,
+        join_path=join_path_str,
         metrics=metrics_str,
         vector_context=vector_str,
-        question=question
+        intent_pattern=intent_pattern,
+        question=_scrub_pii(question)
     )
 
 
-def build_summary_prompt(question: str, data: Any) -> str:
+def _scrub_pii(text: str) -> str:
+    text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b', '[REDACTED_EMAIL]', text)
+    text = re.sub(r'\b\d{3}[-.]?\d{2}[-.]?\d{4}\b', '[REDACTED_SSN]', text)
+    text = re.sub(r'\b(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})\b', '[REDACTED_PHONE]', text)
+    return text
+
+
+def build_summary_prompt(question: str, data: Any, total_count: int = None) -> str:
     """
     Build a prompt for summarizing the database results.
     """
     # Truncate results if too large to avoid token limits
     data_preview = str(data)[:2000] if data else "No data returned."
+    data_preview = _scrub_pii(data_preview)
+    
+    total_str = f"{total_count}" if total_count is not None else "some"
     
     return SUMMARY_TEMPLATE.format(
-        question=question,
+        question=_scrub_pii(question),
+        total_records=total_str,
         data=data_preview
     )
 
 
-def build_summary_prompt_compact(question: str, data: Any) -> str:
+def build_summary_prompt_compact(question: str, data: Any, total_count: int = None) -> str:
     """
     Build a smaller, compatibility-friendly summary prompt for providers/models
     that are sensitive to prompt size or formatting.
     """
     data_preview = str(data)[:1000] if data else "No data returned."
+    data_preview = _scrub_pii(data_preview)
+    total_str = f" ({total_count} total records)" if total_count is not None else ""
     return (
-        f'Question: "{question}"\n'
-        f"Data: {data_preview}\n\n"
-        "Summarize the result in 2-3 short factual sentences. "
-        "Mention the top finding and include important numbers."
+        f'Question: "{_scrub_pii(question)}"\n'
+        f"Data{total_str}: {data_preview}\n\n"
+        "In under 60 words, deliver the key BUSINESS INSIGHT from this data. "
+        "Lead with the most important finding. Bold key numbers. "
+        "No fluff, no mention of rows or previews."
+    )
+
+
+def build_explain_prompt(question: str, sql: str) -> str:
+    """
+    Build a prompt forcing the LLM to explain the SQL query in plain English.
+    """
+    return EXPLAIN_TEMPLATE.format(
+        question=_scrub_pii(question),
+        sql=sql.strip()
     )
 
 
@@ -184,4 +271,4 @@ def build_intent_prompt(question: str) -> str:
     """
     Build a prompt for analyzing the user's visualization intent.
     """
-    return INTENT_ANALYSIS_TEMPLATE.format(question=question)
+    return INTENT_ANALYSIS_TEMPLATE.format(question=_scrub_pii(question))

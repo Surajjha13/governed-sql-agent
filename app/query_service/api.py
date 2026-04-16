@@ -1,5 +1,6 @@
 import asyncio
-from fastapi import APIRouter, HTTPException, Header, Depends, Query
+import anyio
+from fastapi import APIRouter, HTTPException, Header, Depends, Query, BackgroundTasks
 from app.auth.api import get_current_user
 from typing import Optional, List, Dict
 from pydantic import BaseModel, field_validator
@@ -11,43 +12,151 @@ from app.auth.user_manager import user_manager
 from app.query_service.context_builder import build_context
 from app.query_service.prompt_builder import build_prompt
 from app.query_service.rbac_guard import validate_sql_against_rbac
-from app.semantic_service.vector_index import search_vector_index
-from app.llm_service import generate_sql, generate_summary, LLMError
 from app.llm_service.exceptions import LLMRateLimitError
-from app.query_service.execution import execute_sql
+from app.query_service.execution import execute_sql, execute_sql_async
 from app.services.visualization_service import VisualizationService
 from app.auth.policies import filter_schema_for_user, get_effective_rbac_for_user
 
 import app.app_state as app_state
 
 
+import hashlib
+from collections import OrderedDict
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+class ResultCache:
+    def __init__(self, maxsize=100, ttl=60):
+        self.cache = OrderedDict()
+        self.maxsize = maxsize
+        self.ttl = ttl
+
+    def get(self, key):
+        if key in self.cache:
+            val, expiry = self.cache[key]
+            if time.time() > expiry:
+                del self.cache[key]
+                return None
+            self.cache.move_to_end(key)
+            return val
+        return None
+
+    def set(self, key, val):
+        if key in self.cache:
+            del self.cache[key]
+        self.cache[key] = (val, time.time() + self.ttl)
+        if len(self.cache) > self.maxsize:
+            self.cache.popitem(last=False)
+
+RESULT_CACHE = ResultCache(maxsize=100, ttl=60)
+QUERY_PREVIEW_ROWS = 10
+FAST_SUMMARY_MAX_ROWS = QUERY_PREVIEW_ROWS
+FAST_VIZ_MAX_ROWS = QUERY_PREVIEW_ROWS
+FAST_VIZ_MAX_COLS = 8
 
 
 def _record_stage_timing(timings: Dict[str, float], stage: str, started_at: float):
     timings[stage] = round((time.perf_counter() - started_at) * 1000, 2)
 
 
+def _filter_history_by_export_ids(history: List[Dict], item_ids: Optional[str]) -> List[Dict]:
+    if item_ids is None:
+        return history
+
+    target_ids = {
+        token.strip()
+        for token in item_ids.split(",")
+        if token and token.strip()
+    }
+    if not target_ids:
+        return []
+
+    return [
+        item for item in history
+        if str(item.get("id")) in target_ids or str(item.get("request_id")) in target_ids
+    ]
+
+
 def _build_row_limit_guidance(results: Dict) -> Optional[str]:
     if not results.get("truncated"):
         return None
 
-    returned_rows = results.get("returned_rows", len(results.get("rows", [])))
-    row_limit = results.get("row_limit")
-    return (
-        f" Showing the first {returned_rows} rows due to the server row limit"
-        f"{f' ({row_limit})' if row_limit else ''}. Refine the query or export a narrower slice for more detail."
-    )
+    total_count = results.get("total_count")
+    if isinstance(total_count, int) and total_count > 0:
+        return f"A preview is shown here. Export the full result to review all {total_count} matching records."
+    return "A preview is shown here. Export the full result if you need the complete dataset."
+
+
+def _format_summary_value(value) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, float):
+        return f"{value:.2f}"
+    return str(value)
+
+
+def _prettify_column_name(column: str) -> str:
+    return str(column).replace("_", " ").strip()
+
+
+def _describe_result_fields(columns: List[str]) -> str:
+    if not columns:
+        return "the requested fields"
+
+    labels = [_prettify_column_name(col) for col in columns[:3]]
+    if len(labels) == 1:
+        return labels[0]
+    if len(labels) == 2:
+        return f"{labels[0]} and {labels[1]}"
+    return f"{labels[0]}, {labels[1]}, and {labels[2]}"
+
+
+def _build_fast_summary(question: str, results: Dict) -> Optional[str]:
+    """Only short-circuit for trivial cases. All substantive results go to the LLM."""
+    rows = results.get("rows", []) or []
+    columns = results.get("columns", []) or []
+
+    # Zero results — no LLM needed
+    if not rows:
+        return "No matching records were found for your request."
+
+    # Single scalar value — no LLM needed
+    if len(rows) == 1 and len(columns) == 1:
+        column = columns[0]
+        value = _format_summary_value(rows[0].get(column))
+        guidance = _build_row_limit_guidance(results) or ""
+        return f"**{value}** — {_prettify_column_name(column)}.{(' ' + guidance) if guidance else ''}"
+
+    # All other cases: defer to LLM for real business insight
+    return None
+
+
+def _should_use_llm_summary(results: Dict) -> bool:
+    """Always use LLM for business insight summaries when there is data."""
+    rows = results.get("rows", []) or []
+    return bool(rows)
+
+
+def _should_use_llm_viz(results: Dict) -> bool:
+    rows = results.get("rows", []) or []
+    columns = results.get("columns", []) or []
+    return bool(rows) and len(rows) <= FAST_VIZ_MAX_ROWS and len(columns) <= FAST_VIZ_MAX_COLS
 
 
 async def _generate_summary_safe(question: str, results: Dict, session_id: str) -> Dict:
     started_at = time.perf_counter()
-    try:
-        summary = await generate_summary(question, results.get("rows", []), session_id=session_id)
-        guidance = _build_row_limit_guidance(results)
-        if guidance:
-            summary = f"{summary}{guidance}"
+    if not results.get("rows"):
+        return {
+            "summary": "No matching records were found for your request.",
+            "rate_limit": None,
+            "duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+            "had_rate_limit": False,
+            "error": False
+        }
+    fast_summary = _build_fast_summary(question, results)
+    if fast_summary is not None or not _should_use_llm_summary(results):
+        summary = fast_summary or "The query completed successfully."
         return {
             "summary": summary,
             "rate_limit": None,
@@ -55,35 +164,25 @@ async def _generate_summary_safe(question: str, results: Dict, session_id: str) 
             "had_rate_limit": False,
             "error": False
         }
-    except LLMRateLimitError as e:
-        logger.warning(f"Summary generation rate-limited: {e}")
-        summary = (
-            "Results are ready, but summary generation is temporarily rate-limited (HTTP 429). "
-            "Please retry in a moment or switch to another model/provider."
-        )
-        guidance = _build_row_limit_guidance(results)
-        if guidance:
-            summary = f"{summary}{guidance}"
+    try:
+        from app.llm_service import generate_summary
+        total_count = results.get("total_count")
+        summary = await generate_summary(question, results.get("rows", [])[:10], session_id=session_id, total_count=total_count)
+
         return {
             "summary": summary,
-            "rate_limit": {
-                "message": str(e),
-                "recommendations": getattr(e, "recommendations", []) or [],
-                "provider": getattr(e, "provider", None),
-                "model": getattr(e, "model", None)
-            },
+            "rate_limit": None,
             "duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
-            "had_rate_limit": True,
-            "error": True
+            "had_rate_limit": False,
+            "error": False
         }
+    except LLMRateLimitError:
+        # Re-raise so the background task can retry with backoff
+        raise
     except Exception as e:
-        logger.error(f"Error generating summary: {e}")
-        summary = "Could not generate insight summary."
-        guidance = _build_row_limit_guidance(results)
-        if guidance:
-            summary = f"{summary}{guidance}"
+        logger.error(f"Summary generation failed for session {session_id}: {e}")
         return {
-            "summary": summary,
+            "summary": "AI Insight summary generation failed (Internal Error).",
             "rate_limit": None,
             "duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
             "had_rate_limit": False,
@@ -94,14 +193,34 @@ async def _generate_summary_safe(question: str, results: Dict, session_id: str) 
 async def _recommend_visualization_safe(question: str, results: Dict, session_id: str):
     started_at = time.perf_counter()
     try:
-        from app.llm_service import analyze_visualization_intent
+        # --- PERFORMANCE BOOST: Data-First Check ---
+        # If it's a single value (1 row, 1 col), it's always a KPI. Skip expensive intent analysis.
+        rows = results.get("rows", [])
+        cols = results.get("columns", [])
+        if len(rows) == 1 and len(cols) == 1:
+            logger.info(f"Fast-path: Single value 1x1 detected for session {session_id}, forcing KPI.")
+            return {
+                "recommendation": {
+                    "recommended_chart": "kpi",
+                    "confidence": 100,
+                    "reason": "Single numeric value detected - optimal for KPI card.",
+                    "alternatives": [],
+                    "config": {"title": cols[0]}
+                },
+                "duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                "error": False
+            }
 
-        intent_analysis = await analyze_visualization_intent(question, session_id=session_id)
-        viz_recommendation = VisualizationService.recommend_visualization_intelligent(
-            results=results,
-            question=question,
-            llm_intent=intent_analysis
-        )
+        if _should_use_llm_viz(results):
+            from app.llm_service import analyze_visualization_intent
+            intent_analysis = await analyze_visualization_intent(question, session_id=session_id)
+            viz_recommendation = VisualizationService.recommend_visualization_intelligent(
+                results=results,
+                question=question,
+                llm_intent=intent_analysis
+            )
+        else:
+            viz_recommendation = VisualizationService.recommend_visualization(results, question)
         logger.info(
             f"Visualization recommended: {viz_recommendation['recommended_chart']} "
             f"({viz_recommendation['confidence']}%)"
@@ -134,13 +253,22 @@ async def _recommend_visualization_safe(question: str, results: Dict, session_id
             }
 
 
-async def _extract_structured_memory_safe(question: str, history: List[Dict]):
+async def _extract_structured_memory_safe(question: str, history: List[Dict], session_id: str):
     try:
         from app.llm_service import extract_structured_memory
-        return await extract_structured_memory(question, history)
+        return await extract_structured_memory(question, history, session_id)
     except Exception as e:
         logger.error(f"Failed to extract structured memory: {e}")
         return {"tables": [], "metrics": [], "dimensions": [], "time_range": None, "filters": []}
+
+
+async def _explain_sql_safe(question: str, sql: str, session_id: str) -> Optional[str]:
+    try:
+        from app.llm_service import explain_sql
+        return await explain_sql(question, sql, session_id=session_id)
+    except Exception as e:
+        logger.error(f"Failed to securely explain SQL: {e}")
+        return None
 
 
 class QueryRequest(BaseModel):
@@ -187,7 +315,6 @@ class QueryRequest(BaseModel):
             r'^\s*ALTER\s+',        # ALTER at start of question
             r'--\s*$',              # SQL comment at end
             r'/\*.*\*/',            # SQL block comment
-            r'xp_cmdshell',         # SQL Server command execution
             r'EXEC\s*\(',  # Execute command
         ]
         
@@ -202,6 +329,7 @@ class QueryRequest(BaseModel):
 @router.post("/query")
 async def run_query(
     req: QueryRequest,
+    background_tasks: BackgroundTasks,
     x_session_id: Optional[str] = Header(None),
     current_user = Depends(get_current_user)
 ):
@@ -220,6 +348,89 @@ async def run_query(
     app_state.update_activity(session_id)
     state = app_state.get_session(session_id)
 
+    def persist_history_snapshot(
+        *,
+        summary: Optional[str],
+        sql: Optional[str],
+        results: Optional[Dict] = None,
+        error: Optional[str] = None,
+        visualization: Optional[Dict] = None,
+    ) -> int:
+        req_time = int(time.time() * 1000)
+        history_results = results or {"columns": [], "rows": []}
+        history_item = {
+            "id": req_time,
+            "request_id": str(req_time),
+            "question": req.question,
+            "user": req.question,
+            "summary": summary,
+            "assistant": summary,
+            "sql": sql,
+            "explanation": None,
+            "results": history_results,
+            "has_error": bool(error or history_results.get("error")),
+            "visualization": visualization,
+            "structured": {"tables": [], "metrics": [], "dimensions": [], "time_range": None, "filters": []}
+        }
+        state.chat_history.append(history_item)
+        if len(state.chat_history) > 10:
+            state.chat_history = state.chat_history[-10:]
+
+        if app_state.SYSTEM_MODE == "enterprise" and current_user.role != "SOLO_USER":
+            db_name = state.current_connection.get("database", "unknown") if state.current_connection else "unknown"
+            user_manager.save_chat_history(
+                user=current_user,
+                db_name=db_name,
+                question=req.question,
+                sql=sql,
+                summary=summary,
+                results=history_results,
+                visualization=visualization,
+                request_id=req_time
+            )
+
+        return req_time
+
+    def log_observability_snapshot(
+        *,
+        request_id: Optional[int] = None,
+        sql: Optional[str] = None,
+        success: bool,
+        had_rate_limit: bool = False,
+        rate_limit_stage: Optional[str] = None,
+        error_stage: Optional[str] = None,
+        error_message: Optional[str] = None,
+        total_ms: Optional[float] = None,
+    ) -> Optional[int]:
+        if app_state.SYSTEM_MODE != "enterprise" or current_user.role == "SOLO_USER":
+            return None
+
+        from app.llm_service.llm_service import _get_session_config
+
+        llm_cfg = _get_session_config(session_id)
+        db_name = state.current_connection.get("database", "unknown") if state.current_connection else "unknown"
+        return user_manager.log_observability_event(
+            user=current_user,
+            payload={
+                "request_id": request_id,
+                "db_name": db_name,
+                "question": req.question,
+                "sql_query": sql,
+                "llm_provider": llm_cfg.get("provider"),
+                "llm_model": llm_cfg.get("model"),
+                "sql_gen_ms": stage_timings.get("sql_generation_ms"),
+                "db_exec_ms": stage_timings.get("sql_execution_ms"),
+                "summary_ms": None,
+                "viz_ms": None,
+                "total_ms": total_ms if total_ms is not None else round((time.perf_counter() - start_time) * 1000, 2),
+                "success": success,
+                "had_rate_limit": had_rate_limit,
+                "rate_limit_stage": rate_limit_stage,
+                "error_stage": error_stage,
+                "error_message": error_message,
+            }
+        )
+
     # Step 0: Check if DB is connected
     if state.normalized_schema is None:
         logger.warning(f"Query attempt for session {session_id} while database not connected")
@@ -232,58 +443,17 @@ async def run_query(
         }
     user_schema = filter_schema_for_user(state.normalized_schema, current_user.username)
     rbac_restrictions = get_effective_rbac_for_user(current_user.username)
-
-    # Step 0.1: Early rejection of "SELECT *" or "SELECT ALL" patterns in natural language
-    star_patterns = [r"\bselect\s+\*", r"\bselect\s+all\b", r"\bgive\b.*\ball\b", r"\beverything\b"]
-    for pattern in star_patterns:
-        if re.search(pattern, req.question, re.IGNORECASE):
-            logger.info(f"Early rejection triggered for pattern: {pattern}")
-            if app_state.SYSTEM_MODE == "enterprise" and current_user.role != "SOLO_USER":
-                user_manager.log_security_event(
-                    event_type="suspicious_query_pattern",
-                    severity="medium",
-                    username=current_user.username,
-                    role=current_user.role,
-                    event_source="question_guard",
-                    details={"pattern": pattern, "question": req.question[:200]}
-                )
-            return {
-                "question": req.question,
-                "sql": None,
-                "results": {"columns": [], "rows": []},
-                "summary": "For security and performance reasons, please specify the columns you need individually rather than requesting 'all' or '*'.",
-                "error": None
-            }
-
-    # Step 0.1: Early rejection of "SELECT *" or "SELECT ALL" patterns in natural language
-    # We remove 'everything' and 'all' as they can be part of valid questions (e.g., 'all products in category')
-    star_patterns = [r"\bselect\s+\*", r"\bselect\s+all\b"]
-    for pattern in star_patterns:
-        if re.search(pattern, req.question, re.IGNORECASE):
-            logger.info(f"Early rejection triggered for pattern: {pattern}")
-            if app_state.SYSTEM_MODE == "enterprise" and current_user.role != "SOLO_USER":
-                user_manager.log_security_event(
-                    event_type="suspicious_query_pattern",
-                    severity="medium",
-                    username=current_user.username,
-                    role=current_user.role,
-                    event_source="question_guard",
-                    details={"pattern": pattern, "question": req.question[:200]}
-                )
-            return {
-                "question": req.question,
-                "sql": None,
-                "results": {"columns": [], "rows": []},
-                "summary": "For security and performance reasons, please specify the columns you need individually rather than requesting 'all' or '*'.",
-                "error": None
-            }
+    engine = state.current_connection.get("engine", "postgres") if state.current_connection else "postgres"
 
     try:
         vector_started_at = time.perf_counter()
-        candidates = search_vector_index(
-            query=req.question,
-            index=state.vector_index,
-            metadata=state.vector_metadata
+        from app.semantic_service.vector_index import search_vector_index
+        # --- PERFORMANCE BOOST: Offload CPU-bound vector search to thread ---
+        candidates = await anyio.to_thread.run_sync(
+            search_vector_index,
+            req.question,
+            state.vector_index,
+            state.vector_metadata
         )
         logger.info(f"Vector candidates found: {len(candidates)}")
         _record_stage_timing(stage_timings, "vector_search_ms", vector_started_at)
@@ -318,19 +488,34 @@ async def run_query(
     # Generate SQL using LLM with history and vector hits
     try:
         sql_started_at = time.perf_counter()
+        from app.llm_service import generate_sql
         sql = await generate_sql(
             question=req.question,
             context=context,
             schema=user_schema,
             history=history,
             vector_candidates=candidates,
-            session_id=session_id
+            session_id=session_id,
+            engine=engine
         )
         
-        # Handle Policy Refusal (SELECT * / SELECT ALL)
-        if "policy reasons" in sql.lower() or "not allowed" in sql.lower() or "individually" in sql.lower():
-            logger.warning(f"Policy refusal triggered for question: {req.question}")
+        # Handle Policy Refusal — only when the LLM genuinely refused (not a false positive)
+        # The response must look like a refusal message, NOT contain actual SQL
+        sql_lower = sql.lower()
+        is_refusal = (
+            ("i cannot answer" in sql_lower or "i cannot fulfill" in sql_lower or "not in the schema" in sql_lower)
+            and "select" not in sql_lower
+        )
+        if is_refusal:
+            logger.warning(f"LLM refusal detected for question: {req.question}")
+            req_time = persist_history_snapshot(
+                summary=sql,
+                sql=None,
+                results={"columns": [], "rows": []},
+                error=None
+            )
             return {
+                "id": req_time,
                 "question": req.question,
                 "sql": None,
                 "results": {"columns": [], "rows": []},
@@ -355,27 +540,27 @@ async def run_query(
         if recommendations:
             recommendation_text = f" Try one of these models: {', '.join(recommendations)}."
 
-        if app_state.SYSTEM_MODE == "enterprise" and current_user.role != "SOLO_USER":
-            from app.llm_service.llm_service import _get_session_config
-            llm_cfg = _get_session_config(session_id)
-            user_manager.log_observability_event({
-                "username": current_user.username,
-                "role": current_user.role,
-                "db_name": state.current_connection.get("database", "unknown") if state.current_connection else "unknown",
-                "llm_provider": llm_cfg.get("provider"),
-                "llm_model": llm_cfg.get("model"),
-                "sql_gen_ms": stage_timings.get("sql_generation_ms"),
-                "db_exec_ms": None,
-                "summary_ms": None,
-                "viz_ms": None,
-                "total_ms": round((time.perf_counter() - start_time) * 1000, 2),
-                "success": False,
-                "had_rate_limit": True,
-                "rate_limit_stage": "sql_gen",
-                "error_stage": "sql_gen"
-            })
-
+        req_time = persist_history_snapshot(
+            summary=(
+                "Your configured LLM provider is currently rate-limited (HTTP 429). "
+                "Please wait a moment and retry, or switch model/provider in LLM Configuration."
+                f"{recommendation_text}"
+            ),
+            sql=None,
+            results={"error": "LLM Rate Limit Reached.", "columns": [], "rows": []},
+            error="LLM rate limit reached."
+        )
+        log_observability_snapshot(
+            request_id=req_time,
+            sql=None,
+            success=False,
+            had_rate_limit=True,
+            rate_limit_stage="sql_gen",
+            error_stage="sql_gen",
+            error_message=error_str,
+        )
         return {
+            "id": req_time,
             "question": req.question,
             "sql": None,
             "results": {"columns": [], "rows": []},
@@ -392,7 +577,7 @@ async def run_query(
                 "model": getattr(e, "model", None)
             }
         }
-    except LLMError as e:
+    except Exception as e:
         error_str = str(e)
         logger.error(f"LLM error: {error_str}")
         _record_stage_timing(stage_timings, "sql_generation_ms", sql_started_at)
@@ -400,32 +585,19 @@ async def run_query(
         
         if "Validation Error:" in error_str:
             friendly_message = error_str.split("Validation Error: ")[-1]
-            if app_state.SYSTEM_MODE == "enterprise" and current_user.role != "SOLO_USER":
-                from app.llm_service.llm_service import _get_session_config
-                llm_cfg = _get_session_config(session_id)
-                user_manager.log_observability_event({
-                    "username": current_user.username,
-                    "role": current_user.role,
-                    "db_name": state.current_connection.get("database", "unknown") if state.current_connection else "unknown",
-                    "llm_provider": llm_cfg.get("provider"),
-                    "llm_model": llm_cfg.get("model"),
-                    "sql_gen_ms": stage_timings.get("sql_generation_ms"),
-                    "db_exec_ms": None,
-                    "summary_ms": None,
-                    "viz_ms": None,
-                    "total_ms": round((time.perf_counter() - start_time) * 1000, 2),
-                    "success": False,
-                    "had_rate_limit": False,
-                    "rate_limit_stage": None,
-                    "error_stage": "sql_gen"
-                })
+            logger.warning(f"Validation error (non-fatal): {friendly_message}")
+            log_observability_snapshot(
+                sql=None,
+                success=False,
+                error_stage="sql_gen",
+                error_message=friendly_message,
+            )
             return {
                 "question": req.question,
-                "context": context,
-                "candidates": candidates,
                 "sql": None,
                 "results": {"columns": [], "rows": []},
-                "summary": f"I cannot fulfill this request. **{friendly_message}**."
+                "summary": f"I had trouble generating the perfect query, but here's what I found: **{friendly_message}**. Please try rephrasing your question.",
+                "error": None
             }
             
         raise HTTPException(status_code=503, detail=error_str)
@@ -433,22 +605,35 @@ async def run_query(
     # Execute SQL
     try:
         execution_started_at = time.perf_counter()
-        access_denial = validate_sql_against_rbac(sql, rbac_restrictions)
+        access_denial = validate_sql_against_rbac(sql, rbac_restrictions, engine=engine)
         if access_denial:
             logger.warning(
                 f"RBAC denied SQL for user {current_user.username} in session {session_id}: {access_denial}"
             )
             if app_state.SYSTEM_MODE == "enterprise" and current_user.role != "SOLO_USER":
                 user_manager.log_security_event(
+                    user=current_user,
                     event_type="policy_denial",
                     severity="high",
-                    username=current_user.username,
-                    role=current_user.role,
                     event_source="rbac_guard",
                     resource_name=access_denial,
                     details={"sql": sql}
                 )
+            req_time = persist_history_snapshot(
+                summary=access_denial,
+                sql=None,
+                results={"columns": [], "rows": []},
+                error="RBAC policy restriction."
+            )
+            log_observability_snapshot(
+                request_id=req_time,
+                sql=sql,
+                success=False,
+                error_stage="rbac",
+                error_message=access_denial,
+            )
             return {
+                "id": req_time,
                 "question": req.question,
                 "sql": None,
                 "results": {"columns": [], "rows": []},
@@ -456,7 +641,17 @@ async def run_query(
                 "error": "RBAC policy restriction."
             }
 
-        results = execute_sql(sql, session_id=session_id)
+        # --- PERFORMANCE BOOST: Result Caching ---
+        sql_hash = hashlib.md5(f"{session_id}|{sql}".encode('utf-8')).hexdigest()
+        cached_res = RESULT_CACHE.get(sql_hash)
+        
+        if cached_res:
+            logger.info("Result Cache hit for SQL")
+            results = cached_res
+        else:
+            results = await execute_sql_async(sql, session_id=session_id, row_limit=QUERY_PREVIEW_ROWS)
+            if not results.get("error"):
+                RESULT_CACHE.set(sql_hash, results)
         
         # --- AUTO-REPAIR LOOP (1 step) ---
         if results.get("error"):
@@ -470,35 +665,49 @@ async def run_query(
                 context=context,
                 schema=user_schema,
                 history=history,
-                session_id=session_id
+                session_id=session_id,
+                engine=engine
             )
             
             if repaired_sql != sql:
                 logger.info("Retrying with repaired SQL...")
                 sql = repaired_sql
-                access_denial = validate_sql_against_rbac(sql, rbac_restrictions)
+                access_denial = validate_sql_against_rbac(sql, rbac_restrictions, engine=engine)
                 if access_denial:
                     logger.warning(
                         f"RBAC denied repaired SQL for user {current_user.username} in session {session_id}: {access_denial}"
                     )
                     if app_state.SYSTEM_MODE == "enterprise" and current_user.role != "SOLO_USER":
                         user_manager.log_security_event(
+                            user=current_user,
                             event_type="policy_denial",
                             severity="high",
-                            username=current_user.username,
-                            role=current_user.role,
                             event_source="rbac_guard_repair",
                             resource_name=access_denial,
                             details={"sql": sql}
                         )
+                    req_time = persist_history_snapshot(
+                        summary=access_denial,
+                        sql=None,
+                        results={"columns": [], "rows": []},
+                        error="RBAC policy restriction."
+                    )
+                    log_observability_snapshot(
+                        request_id=req_time,
+                        sql=sql,
+                        success=False,
+                        error_stage="rbac",
+                        error_message=access_denial,
+                    )
                     return {
+                        "id": req_time,
                         "question": req.question,
                         "sql": None,
                         "results": {"columns": [], "rows": []},
                         "summary": access_denial,
                         "error": "RBAC policy restriction."
                     }
-                results = execute_sql(sql, session_id=session_id)
+                results = await execute_sql_async(sql, session_id=session_id, row_limit=QUERY_PREVIEW_ROWS)
         
         logger.info(f"SQL processed (Execution Status: {'Success' if not results.get('error') else 'Failed'})")
         _record_stage_timing(stage_timings, "sql_execution_ms", execution_started_at)
@@ -507,105 +716,180 @@ async def run_query(
         results = {"error": str(e), "columns": [], "rows": []}
         _record_stage_timing(stage_timings, "sql_execution_ms", execution_started_at)
 
+    stage_timings["total_request_ms"] = round((time.perf_counter() - start_time) * 1000, 2)
     post_processing_started_at = time.perf_counter()
-    summary_payload, viz_recommendation, structured = await asyncio.gather(
-        _generate_summary_safe(req.question, results, session_id),
-        _recommend_visualization_safe(req.question, results, session_id),
-        _extract_structured_memory_safe(req.question, state.chat_history)
-    )
-    _record_stage_timing(stage_timings, "post_processing_ms", post_processing_started_at)
-    summary = summary_payload["summary"]
-    summary_rate_limit = summary_payload["rate_limit"]
-    stage_timings["summary_ms"] = summary_payload["duration_ms"]
-    stage_timings["viz_ms"] = viz_recommendation["duration_ms"]
-    viz_result = viz_recommendation["recommendation"]
-    had_rate_limit = bool(sql_rate_limit or summary_payload["had_rate_limit"])
-    rate_limit_stage = sql_rate_limit["stage"] if sql_rate_limit else ("summary" if summary_payload["had_rate_limit"] else None)
-    error_stage = sql_error_stage
-    if error_stage is None and results.get("error"):
-        error_stage = "db_exec"
-    if error_stage is None and summary_payload["error"]:
-        error_stage = "summary"
-    if error_stage is None and viz_recommendation["error"]:
-        error_stage = "viz"
-
-    # Save to memory (Safe)
+    req_time = int(time.time() * 1000)
+    
+    # Save skeleton to memory and DB immediately for frontend polling
     try:
         state.chat_history.append({
-            "id": int(time.time() * 1000),
+            "id": req_time,
+            "request_id": str(req_time),
             "question": req.question,
             "user": req.question,
-            "summary": summary,
-            "assistant": summary,
+            "summary": None,
+            "assistant": None,
             "sql": sql,
+            "explanation": None,
             "results": results,
             "has_error": bool(results.get("error")),
-            "visualization": viz_result,
-            "structured": structured
+            "visualization": None,
+            "structured": {"tables": [], "metrics": [], "dimensions": [], "time_range": None, "filters": []}
         })
-        # Trim history to keep context manageable
-        if len(state.chat_history) > 5:
-            state.chat_history = state.chat_history[-5:]
-
-        # Log to System Audit (Only for Enterprise users)
-        if app_state.SYSTEM_MODE == "enterprise" and current_user.role != "SOLO_USER":
-            # Audit log (Security/Admin)
-            latency = round(time.perf_counter() - start_time, 3)
-            user_manager.log_audit(
-                username=current_user.username,
-                role=current_user.role,
-                question=req.question,
-                sql_query=sql,
-                latency_sec=latency,
-                success=not bool(results.get("error"))
-            )
-
-            from app.llm_service.llm_service import _get_session_config
-            llm_cfg = _get_session_config(session_id)
-            user_manager.log_observability_event({
-                "username": current_user.username,
-                "role": current_user.role,
-                "db_name": state.current_connection.get("database", "unknown") if state.current_connection else "unknown",
-                "llm_provider": llm_cfg.get("provider"),
-                "llm_model": llm_cfg.get("model"),
-                "sql_gen_ms": stage_timings.get("sql_generation_ms"),
-                "db_exec_ms": stage_timings.get("sql_execution_ms"),
-                "summary_ms": stage_timings.get("summary_ms"),
-                "viz_ms": stage_timings.get("viz_ms"),
-                "total_ms": round((time.perf_counter() - start_time) * 1000, 2),
-                "success": not bool(results.get("error")) and error_stage is None,
-                "had_rate_limit": had_rate_limit,
-                "rate_limit_stage": rate_limit_stage,
-                "error_stage": error_stage
-            })
+        if len(state.chat_history) > 10: # Increased memory buffer
+            state.chat_history = state.chat_history[-10:]
             
-            # Chat History (User persistence)
+        # Immediate DB persistence for Enterprise mode
+        if app_state.SYSTEM_MODE == "enterprise" and current_user.role != "SOLO_USER":
             db_name = state.current_connection.get("database", "unknown") if state.current_connection else "unknown"
             user_manager.save_chat_history(
-                username=current_user.username,
-                db_name=db_name,
-                question=req.question,
+                user=current_user, 
+                db_name=db_name, 
+                question=req.question, 
+                sql=sql, 
+                summary=None, 
+                results=results, 
+                request_id=req_time
+            )
+            
+            # --- NEW: Immediate Audit/Observability logging for real-time dashboard update ---
+            user_manager.log_audit(
+                user=current_user, 
+                question=req.question, 
+                sql_query=sql, 
+                latency_sec=stage_timings.get("total_request_ms", 0)/1000, 
+                success=True if not results.get("error") else False
+            )
+
+            obs_id = log_observability_snapshot(
+                request_id=req_time,
                 sql=sql,
-                summary=summary,
-                results=results,
-                visualization=viz_result
+                success=True if not results.get("error") else False,
+                error_stage=None if not results.get("error") else "execution",
+                error_message=results.get("error"),
+                total_ms=stage_timings.get("total_request_ms", 0),
             )
         else:
-            logger.info(f"Skipping persistence for session {session_id} (Solo user or non-enterprise context)")
+            obs_id = None
     except Exception as e:
-        logger.error(f"Failed to update chat history: {e}")
+        logger.error(f"Initial history persistence failed: {e}")
 
-    stage_timings["total_request_ms"] = round((time.perf_counter() - start_time) * 1000, 2)
-    logger.info(f"Query stage timings for session {session_id}: {stage_timings}")
+    logger.info(f"Query fast-path timings for session {session_id}: {stage_timings}")
+    
+    # Schedule slow metadata processing in background
+    if not results.get("error"):
+        initial_total_ms = stage_timings.get("total_request_ms", 0)
+        async def hydrate_metadata(q, s, sid, req_id, res, user, o_id, init_ms):
+            try:
+                state_ref = app_state.get_session(sid)
+                
+                # Helper to update history item (Memory + DB)
+                def update_history_item(key, value):
+                    # 1. Update in-memory state for fast lookup
+                    updated_memory = False
+                    for h in reversed(state_ref.chat_history):
+                        if str(h.get("id")) == str(req_id):
+                            h[key] = value
+                            if key == "summary":
+                                h["assistant"] = value
+                            updated_memory = True
+                            break
+                    
+                    # 2. Update persistent DB for Enterprise mode polling
+                    if app_state.SYSTEM_MODE == "enterprise" and user.role != "SOLO_USER":
+                        user_manager.update_chat_history_partial(user.username, req_id, {key: value})
+                        
+                    return updated_memory
+
+                # Start tasks concurrently but update as they finish
+                async def run_summary():
+                    max_retries = 3
+                    base_delay = 2
+                    for attempt in range(max_retries):
+                        try:
+                            res_summ = await _generate_summary_safe(q, res, sid)
+                            update_history_item("summary", res_summ.get("summary"))
+                            return res_summ
+                        except LLMRateLimitError as e:
+                            if attempt < max_retries - 1:
+                                delay = base_delay * (2 ** attempt)
+                                logger.warning(f"Summary rate-limited (429). Retry {attempt+1}/{max_retries} in {delay}s...")
+                                await asyncio.sleep(delay)
+                            else:
+                                # Final failure
+                                err_msg = "Summary generation failed due to persistent rate limiting. Please try again later."
+                                update_history_item("summary", err_msg)
+                                return {"summary": err_msg, "error": True}
+                        except Exception as e:
+                            logger.error(f"Sync-level error in run_summary background task: {e}")
+                            return None
+
+                async def run_viz():
+                    res_viz = await _recommend_visualization_safe(q, res, sid)
+                    update_history_item("visualization", res_viz.get("recommendation"))
+                    return res_viz
+
+                async def run_struct():
+                    res_struct = await _extract_structured_memory_safe(q, state_ref.chat_history, sid)
+                    update_history_item("structured", res_struct)
+                    return res_struct
+
+                # Run the important enrichments concurrently; SQL explanation is skipped to keep the
+                # interactive path production-friendly.
+                summ_res, viz_res, struct_res = await asyncio.gather(
+                    run_summary(),
+                    run_viz(),
+                    run_struct()
+                )
+                 
+                # Keep total_ms aligned with the user-visible API response time; background
+                # enrichment latency is tracked per-stage without inflating request latency.
+                if o_id and app_state.SYSTEM_MODE == "enterprise" and user.role != "SOLO_USER":
+                    s_ms = summ_res.get("duration_ms", 0) if isinstance(summ_res, dict) else 0
+                    v_ms = viz_res.get("duration_ms", 0) if isinstance(viz_res, dict) else 0
+                    user_manager.update_observability_event(o_id, {
+                        "summary_ms": s_ms,
+                        "viz_ms": v_ms,
+                        "total_ms": init_ms
+                    })
+                
+                # Final console log when hydration completes
+                logger.info(f"Background metadata hydration complete for req {req_id}")
+            except Exception as e:
+                logger.error(f"Global background hydration error: {e}")
+                
+        background_tasks.add_task(
+            hydrate_metadata,
+            req.question,
+            sql,
+            session_id,
+            req_time,
+            results,
+            current_user,
+            obs_id,
+            initial_total_ms
+        )
+    else:
+        # Fast fail persistence for DB errors
+        s_val = f"**Query Blocked or Failed**\n\n{results.get('error')}"
+        for h in reversed(state.chat_history):
+            if h.get("id") == req_time:
+                h["summary"] = s_val
+                h["assistant"] = s_val
+                break
+        if app_state.SYSTEM_MODE == "enterprise" and current_user.role != "SOLO_USER":
+            user_manager.update_chat_history_partial(current_user.username, req_time, {"summary": s_val})
 
     return {
+        "id": req_time,
         "question": req.question,
         "sql": sql,
+        "explanation": None,
         "results": results,
-        "summary": summary,
-        "visualization": viz_result,
+        "summary": None if not results.get("error") else s_val,
+        "visualization": None,
         "error": results.get("error"),
-        "llm_rate_limit": summary_rate_limit
+        "llm_rate_limit": None
     }
 
 
@@ -637,7 +921,7 @@ async def get_history(
     # If enterprise, fetch from DB
     db_name = state.current_connection.get("database", "unknown") if state.current_connection else "unknown"
     return user_manager.get_chat_history(
-        current_user.username, 
+        current_user, 
         db_name, 
         limit=limit,
         start_date=start_date,
@@ -659,7 +943,7 @@ async def clear_history(
         return {"message": "Solo session history cleared"}
         
     db_name = state.current_connection.get("database", "unknown") if state.current_connection else "unknown"
-    user_manager.clear_chat_history(current_user.username, db_name)
+    user_manager.clear_chat_history(current_user, db_name)
     return {"message": f"History cleared for {db_name}"}
 
 @router.delete("/history")
@@ -683,7 +967,7 @@ async def delete_history_items(
          
     success_count = 0
     for iid in ids_to_delete:
-        if user_manager.delete_history_item(current_user.username, iid):
+        if user_manager.delete_history_item(current_user, iid):
             success_count += 1
             
     if success_count == 0:
@@ -707,11 +991,9 @@ async def export_excel(
         history = state.chat_history
     else:
         db_name = state.current_connection.get("database", "unknown") if state.current_connection else "unknown"
-        history = user_manager.get_chat_history(current_user.username, db_name)
+        history = user_manager.get_chat_history(current_user, db_name)
         
-    if item_ids is not None:
-        target_ids = [int(i.strip()) for i in item_ids.split(",") if i.strip().isdigit()]
-        history = [h for h in history if h.get("id") in target_ids]
+    history = _filter_history_by_export_ids(history, item_ids)
         
     if not history:
         raise HTTPException(status_code=404, detail="No history to export")
@@ -725,6 +1007,22 @@ async def export_excel(
         # For single item, export the actual SQL result table rows
         h = history[0]
         results_data = h['results']
+        
+        # Re-execute the query with no row limit to get ALL data for export
+        if h.get('sql'):
+            try:
+                from app.query_service.execution import execute_sql
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Re-executing query for export to fetch all rows without limit. ID: {h.get('id')}")
+                # row_limit=0 corresponds to no limit in execution logic
+                full_results = execute_sql(h['sql'], session_id=session_id, row_limit=0)
+                if full_results and not full_results.get('error'):
+                    results_data = full_results
+            except Exception as e:
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to fetch full results for export, using cached rows. Error: {e}")
+                
         df = pd.DataFrame(results_data['rows'])
         
         # Ensure column order if available
@@ -776,11 +1074,9 @@ async def export_pdf(
         history = state.chat_history
     else:
         db_name = state.current_connection.get("database", "unknown") if state.current_connection else "unknown"
-        history = user_manager.get_chat_history(current_user.username, db_name)
+        history = user_manager.get_chat_history(current_user, db_name)
         
-    if item_ids is not None:
-        target_ids = [int(i.strip()) for i in item_ids.split(",") if i.strip().isdigit()]
-        history = [h for h in history if h.get("id") in target_ids]
+    history = _filter_history_by_export_ids(history, item_ids)
         
     if not history:
         raise HTTPException(status_code=404, detail="No history to export")
@@ -909,5 +1205,3 @@ async def export_pdf(
     
     headers = {'Content-Disposition': 'attachment; filename="chat_history.pdf"'}
     return StreamingResponse(output, headers=headers, media_type='application/pdf')
-
-

@@ -1,119 +1,225 @@
-# SQL Agent: Natural Language to SQL Interface
+# SQL Agent
 
-![SQL Agent Architecture](https://img.shields.io/badge/Architecture-FastAPI%20%7C%20Vanilla%20JS%20%7C%20Multi--LLM-blue)
-![Security](https://img.shields.io/badge/Security-SQLGlot%20%7C%20RBAC-green)
+SQL Agent is a FastAPI application with a lightweight web frontend that turns natural-language questions into safe, read-only SQL queries. It supports schema discovery, LLM-based SQL generation, query execution, result summarization, and a browser UI for both solo and enterprise-style workflows.
 
-SQL Agent is an intelligent, AI-powered tool designed to bridge the gap between human language and relational databases. It allows users to query databases (Postgres, SQL Server) using plain English, automatically translating questions into valid SQL, executing them, and providing natural language insights along with dynamic visualizations.
+This README is tailored to the current repository and a local Windows PowerShell setup.
 
----
+## What This Project Does
 
-## 🚀 Key Features
+- Connects to PostgreSQL and MySQL databases
+- Inspects schema metadata and builds semantic context
+- Uses an LLM provider to generate SQL from plain-English questions
+- Applies validation and guardrails before execution
+- Returns table results, summaries, and chart-friendly output
+- Includes authentication, admin flows, and RBAC-oriented enterprise features
 
-- **Text-to-SQL Conversion:** Converts complex natural language questions into optimized SQL queries.
-- **Multi-LLM Integration:** Supports multiple providers including **Groq (Llama-3)**, **OpenAI (GPT-4o)**, **Google Gemini**, **Anthropic**, and **DeepSeek**.
-- **Self-Correcting SQL:** Automatically detects and repairs common SQL syntax errors or schema mismatches via an internal "SQL Repair" loop.
-- **Dynamic Visualization:** Suggests and renders appropriate charts (Bar, Line, Pie, Area) using **Chart.js**.
-- **Enterprise-Grade Security (RBAC):** Implements Role-Based Access Control to filter database schemas, ensuring users only see data they are authorized to access.
-- **SQL Injection Prevention:** Uses **AST (Abstract Syntax Tree)** parsing via `sqlglot` to block destructive commands (`DROP`, `DELETE`, `UPDATE`) and prevent `SELECT *`.
-- **Semantic Search:** Uses **FAISS** and `sentence-transformers` for intelligent schema discovery in large databases.
+## Tech Stack
 
----
+- Backend: FastAPI, Uvicorn
+- Frontend: static HTML, CSS, JavaScript
+- Data access: SQLAlchemy, asyncpg, psycopg2, pymysql
+- LLM providers: Groq, OpenAI, Gemini
+- Semantic search: sentence-transformers, FAISS, Torch
 
-## 🛠️ Technology Stack
+## Current Project Layout
 
-- **Backend:** [FastAPI](https://fastapi.tiangolo.com/) (Python)
-- **Frontend:** HTML5, CSS3, Vanilla JavaScript (Refined UI)
-- **Database Support:** PostgreSQL (`psycopg2`), SQL Server (`pyodbc`)
-- **LLM Processing:** Groq, OpenAI, Google AI, Anthropic APIs
-- **Core Libraries:**
-  - `sqlglot`: SQL Parsing and Dialect Translation
-  - `pandas`: Data manipulation and reporting
-  - `FAISS` & `sentence-transformers`: Vector search for schema metadata
-  - `fpdf2` & `xlsxwriter`: PDF and Excel report generation
+- `main.py`: app startup, CORS, health route, frontend routing
+- `app/auth`: authentication, JWT handling, bootstrap admin setup, RBAC
+- `app/connection_service`: database connection lifecycle
+- `app/schema_service`: schema discovery and normalization
+- `app/query_service`: prompt building, validation, execution, formatting
+- `app/llm_service`: provider adapters, SQL generation, retries, summaries
+- `app/semantic_service`: embedding model loading and vector search
+- `frontend`: landing page, workspace UI, login page, admin page
+- `tests`: automated test coverage
+- `download_models.py`: optional model pre-download helper
 
----
+## Requirements
 
-## 🏗️ Technical Architecture
+Before starting, make sure you have:
 
-```mermaid
-graph TD
-    User((User)) -->|Question| UI[Frontend UI]
-    UI -->|API Request| FastAPI Backend
-    
-    subgraph "Backend Processing"
-        FastAPI[FastAPI Backend] --> RBAC[RBAC Schema Filter]
-        RBAC --> Intent[Intent Analysis]
-        Intent --> Prompt[Prompt Builder]
-        Prompt --> LLM[LLM Generator]
-        LLM -->|SQL Query| Validator[SQLGlot Validator]
-        Validator -->|Safe Query| Exec[Query Executor]
-    end
-    
-    Exec -->|SQL| DB[(Postgres/SQL Server)]
-    DB -->|Results| Exec
-    Exec -->|Data| UI
-    UI -->|Charts/Summary| User
+- Python 3.10 or newer
+- `pip`
+- PowerShell
+- Access to a PostgreSQL or MySQL database
+- At least one LLM API key:
+  - `GROQ_API_KEY`
+  - `OPENAI_API_KEY`
+  - `GEMINI_API_KEY`
+
+## Local Setup on Windows
+
+### 1. Create and activate a virtual environment
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
 ```
 
-1. **User Query:** The user submits a question in the UI.
-2. **Schema Introspection:** The backend retrieves the database schema (filtered by RBAC).
-3. **Intent Analysis:** A small LLM call identifies the type of analysis (Trend, Comparison, etc.) to suggest visualizations.
-4. **Prompt Construction:** A structured prompt is built, including schema, history, and results from semantic search.
-5. **SQL Generation:** The LLM generates the SQL query.
-6. **Validation & Optimization:** `sqlglot` validates the query against security rules.
-7. **Execution:** The query is executed on the target database via Pandas.
-8. **Insights & Visuals:** The system generates a natural language summary and suggests charts.
+If PowerShell blocks activation, run this once in a PowerShell window:
 
----
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
 
-## ⚙️ Installation & Setup
+### 2. Install dependencies
 
-### 1. Prerequisites
-- Python 3.9+
-- A valid API Key for Groq or OpenAI.
-
-### 2. Setup
-```bash
-# Clone the repository
-git clone <your-repo-link>
-cd SQL_Agent
-
-# Create a virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+```powershell
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 3. Environment Variables
-Create a `.env` file in the root directory:
-```env
-GROQ_API_KEY=your_groq_key
-OPENAI_API_KEY=your_openai_key
-# Optional
-GEMINI_API_KEY=your_gemini_key
-ANTHROPIC_API_KEY=your_anthropic_key
+Note: `requirements.txt` includes Torch, FAISS, and sentence-transformers, so the first install can take a while.
+
+### 3. Create your environment file
+
+```powershell
+Copy-Item .env.example .env
 ```
 
-### 4. Running the Application
-```bash
-python main.py
+Then edit `.env` with your real values.
+
+## Environment Variables
+
+The app currently expects these important values:
+
+- `MASTER_KEY`: required for token signing and encrypted secret handling
+- `BOOTSTRAP_ADMIN_PASSWORD`: required on first startup when no admin exists yet
+- One provider key such as `GROQ_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`
+- Optional `ALLOWED_ORIGINS`: comma-separated CORS origins
+
+Database values in `.env.example` are placeholders for your own PostgreSQL or MySQL server:
+
+- `DB_ENGINE`
+- `DB_HOST`
+- `DB_PORT`
+- `DB_NAME`
+- `DB_USER`
+- `DB_PASSWORD`
+
+Important: `.env.example` currently uses `GOOGLE_API_KEY`, but the runtime code reads `GEMINI_API_KEY`. Use `GEMINI_API_KEY` in your real `.env` file unless you also update the application code.
+
+## Run the App Locally
+
+Start the API from the repository root:
+
+```powershell
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
-Then, open `frontend/landing.html` in your web browser.
 
----
+Then open:
 
-## 🛡️ Security Design
+- `http://127.0.0.1:8000/` for the landing page
+- `http://127.0.0.1:8000/workspace` for the main app
+- `http://127.0.0.1:8000/login` for login
+- `http://127.0.0.1:8000/admin` for the admin page
 
-SQL Agent is designed with a "Security-First" approach:
-- **Restricted Operations:** Only `SELECT` statements are permitted.
-- **AST Validation:** Every query is parsed before execution. If a non-select or forbidden pattern (like `SELECT *`) is detected, the system rejects it or asks for repair.
-- **RBAC Schema Masking:** The LLM only receives metadata for tables and columns authorized for the current user's role.
+Health check:
 
----
+- `http://127.0.0.1:8000/health`
 
-## 🔮 Future Enhancements
-- **Agentic Multi-Step Reasoning:** Supporting multi-turn data analysis.
-- **Advanced Caching:** Redis-based result caching for performance.
-- **Deeper Integration:** Direct Slack/Teams integration for query alerts.
+## Optional: Pre-download Embedding Models
+
+The app preloads the embedding model on startup. If you want to download it ahead of time:
+
+```powershell
+python .\download_models.py
+```
+
+This stores the model under a local `models/` folder.
+
+## Docker Option
+
+This repo includes a production-oriented container setup for the FastAPI app.
+
+### 1. Create your environment file
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Fill in at least:
+
+- `MASTER_KEY`
+- `BOOTSTRAP_ADMIN_PASSWORD`
+- one of `GROQ_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`
+
+If your database is running on your host machine, keep:
+
+- `DB_HOST=host.docker.internal`
+
+### 2. Build and run the container
+
+```powershell
+docker compose up --build
+```
+
+The API is exposed on port `8000`.
+
+The compose file persists downloaded embedding models and logs in named Docker volumes so the container does not need to re-download them every time.
+
+### 3. Open the app
+
+- `http://127.0.0.1:8000/`
+- `http://127.0.0.1:8000/health`
+
+### 4. Stop the stack
+
+```powershell
+docker compose down
+```
+
+## First-Time Startup Notes
+
+- On first boot, the app uses `BOOTSTRAP_ADMIN_PASSWORD` to create the initial admin account if one does not already exist.
+- The app starts a background task for idle connection cleanup.
+- The app also starts loading the embedding model during startup, so the first launch may take longer than later runs.
+
+## Supported Database Engines
+
+- PostgreSQL
+- MySQL
+
+## Common Development Commands
+
+Install dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+Run tests:
+
+```powershell
+pytest
+```
+
+Start the development server:
+
+```powershell
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+## Known Repository Notes
+
+- The README previously referenced a `docs/` directory, but that directory is not present in this workspace right now.
+- `.env.example` and runtime config are not fully aligned for Gemini naming.
+- The application appears to support enterprise and solo flows through the frontend routes, but startup is still a single FastAPI service.
+
+## Troubleshooting
+
+If the app does not start:
+
+- Confirm your virtual environment is activated
+- Confirm `.env` exists and contains `MASTER_KEY`
+- Confirm you set `BOOTSTRAP_ADMIN_PASSWORD` for first boot
+- Confirm at least one LLM API key is set
+- Re-run `pip install -r requirements.txt` if Torch or FAISS dependencies failed during install
+
+If PowerShell cannot activate the environment:
+
+- Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+
+If model loading feels slow on first run:
+
+- Run `python .\download_models.py` before starting the server

@@ -42,10 +42,10 @@ def build_vector_index(
 
     for table in schema.tables:
         for col in table.columns:
-            if not col.description:
-                continue
-
-            texts.append(f"{table.table}.{col.name}: {col.description}")
+            # Fallback to name if description is missing
+            desc = col.description if col.description else f"The {col.name} column in the {table.table} table."
+            
+            texts.append(f"{table.table}.{col.name}: {desc}")
             metadata.append({
                 "table": table.table,
                 "column": col.name,

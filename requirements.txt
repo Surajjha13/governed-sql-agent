@@ -1,6 +1,11 @@
 fastapi
 uvicorn[standard]
 python-dotenv
+cryptography
+slowapi
+PyJWT
+SQLAlchemy
+asyncpg
 
 groq
 pandas
@@ -11,16 +16,17 @@ pydantic
 sqlparse
 regex
 sqlglot
+pymysql
 
 psycopg2-binary
-pyodbc
-
 httpx
 requests
+anyio
 
 orjson
 typing-extensions
 click
+pytest
 
 # Semantic Search & Embeddings
 --extra-index-url https://download.pytorch.org/whl/cpu

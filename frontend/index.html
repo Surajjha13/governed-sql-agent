@@ -5,9 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SQL Agent | Professional Data Insights</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="shortcut icon" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
 </head>
 
@@ -30,14 +33,24 @@
                 <button class="nav-item" id="btn-show-ai-settings">
                     <span class="icon">🤖</span> LLM Configuration
                 </button>
+
                 <a href="/admin" class="nav-item nav-hidden" id="nav-admin" style="text-decoration: none;">
                     <span class="icon">⚙️</span> Admin Panel
                 </a>
             </nav>
 
             <div class="connection-status" id="connection-status">
-                <div class="status-indicator disconnected"></div>
-                <span class="status-text">Disconnected</span>
+                <div class="status-header">
+                    <div class="status-indicator disconnected"></div>
+                    <span class="status-text">Disconnected</span>
+                </div>
+
+                <!-- AI Indexing Status Badge -->
+                <div id="ai-status-badge" class="ai-status-container" style="display: none;">
+                    <span class="ai-status-icon">🧠</span>
+                    <span class="ai-status-text">AI Ready</span>
+                </div>
+
                 <button id="btn-show-connect" class="btn-secondary">Connect DB</button>
             </div>
 
@@ -62,22 +75,31 @@
                         </div>
                     <div class="agent-details">
                         <h2>Data Agent</h2>
-                        <p class="connection-info">Connected to <span id="connected-db-name">sql_agent_db</span></p>
+                        <p class="connection-info"><span id="connected-db-name">sql_agent_db</span></p>
                     </div>
                 </div>
                 <div class="header-actions">
+                    <button id="btn-signout" class="btn-text">Sign Out</button>
                     <button id="btn-disconnect" class="btn-text danger">Disconnect</button>
                 </div>
             </header>
 
             <div class="chat-container">
                 <div id="chat-messages" class="message-list">
-                    <!-- Messages will be injected here -->
-                    <div class="message bot">
-                        <div class="bubble">
-                            <p>Hello! 👋</p>
-                            <p>I'm connected to your database. Ask me anything, and I'll generate Insights for
-                                you.</p>
+                    <!-- Premium Welcome Hero -->
+                    <div class="welcome-hero" id="welcome-hero">
+                        <div class="welcome-hero-inner">
+                            <div class="welcome-avatar">
+                                <img src="https://img.icons8.com/isometric/96/database.png" alt="DB" />
+                            </div>
+                            <h2 class="welcome-title">Data Agent <span class="welcome-badge">AI</span></h2>
+                            <p class="welcome-subtitle">Connected to your database. Ask me anything in plain English and I'll generate insights instantly.</p>
+                            <div class="welcome-chips">
+                                <button class="chip" onclick="document.getElementById('query-input').value=this.innerText; document.getElementById('query-input').focus();">📊 Show top 10 records</button>
+                                <button class="chip" onclick="document.getElementById('query-input').value=this.innerText; document.getElementById('query-input').focus();">📈 Sales trend this month</button>
+                                <button class="chip" onclick="document.getElementById('query-input').value=this.innerText; document.getElementById('query-input').focus();">🔍 Count rows per table</button>
+                                <button class="chip" onclick="document.getElementById('query-input').value=this.innerText; document.getElementById('query-input').focus();">⚡ Show table summary</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -97,59 +119,64 @@
 
                 <!-- Localized Loading Overlay -->
                 <div class="loading-overlay" id="loading-overlay" style="display: none;">
-                    <div class="loader"></div>
-                    <p id="loading-text">Processing your request...</p>
+                    <div class="loading-spinner-ring">
+                        <div class="loading-spinner-inner"></div>
+                    </div>
+                    <p id="loading-text" class="loading-text">Processing your request...</p>
+                    <span class="loading-sub">Analyzing your data with AI</span>
                 </div>
             </div> <!-- End Dashboard View -->
 
             <!-- ── History View ── -->
-            <div id="history-view" style="display: none; flex-direction: column; height: 100%; width: 100%; padding: 24px; overflow-y: auto;">
-                <header style="margin-bottom: 24px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                        <h2>Chat History</h2>
-                        <p style="color: #666; font-size: 0.9rem; margin: 0;">Past queries and insights for <span id="history-db-name" style="font-weight: 600; color: var(--brand);">None</span></p>
-                    </div>
-                    <!-- History Filtering Toolbar -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; background: #f8f9fa; padding: 14px 20px; border-radius: 8px; border: 1px solid #eee;">
-                        <div style="display: flex; align-items: center; gap: 16px;">
-                            <span style="font-size: 0.9rem; font-weight: 600; color: #555;">Filter by Date:</span>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <input type="date" id="history-filter-start" class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; border-color: #ddd; width: 150px;">
-                                <span style="font-size: 0.8rem; color: #999;">to</span>
-                                <input type="date" id="history-filter-end" class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; border-color: #ddd; width: 150px;">
-                            </div>
-                            <div style="display: flex; gap: 8px; margin-left: 8px;">
-                                <button id="btn-apply-history-filter" class="btn-primary" style="padding: 6px 16px; font-size: 0.8rem;">Apply</button>
-                                <button id="btn-clear-history-filter" class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;">Clear</button>
-                            </div>
+            <div id="history-view" style="display: none; flex-direction: column; height: 100%; width: 100%; padding: 28px 32px; overflow-y: auto;">
+                <header class="history-view-header">
+                    <h2>Chat History</h2>
+                    <p class="history-subtitle">Past queries and insights for <span id="history-db-name">None</span></p>
+                </header>
+
+                <!-- History Filtering Toolbar -->
+                <div class="history-toolbar">
+                    <div class="toolbar-filter-group">
+                        <div>
+                            <span class="toolbar-label">From</span>
+                            <input type="date" id="history-filter-start" class="history-date-input">
                         </div>
-                        <div style="display: flex; align-items: center; gap: 12px; white-space: nowrap;">
-                            <span style="font-size: 0.9rem; font-weight: 600; color: #555;">Sort By:</span>
-                            <select id="history-sort" class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; border-color: #ddd; background: white; min-width: 140px;">
+                        <span class="toolbar-sep">→</span>
+                        <div>
+                            <span class="toolbar-label">To</span>
+                            <input type="date" id="history-filter-end" class="history-date-input">
+                        </div>
+                        <div class="toolbar-action-group">
+                            <button id="btn-apply-history-filter" class="btn-toolbar primary">Apply</button>
+                            <button id="btn-clear-history-filter" class="btn-toolbar secondary">Clear</button>
+                        </div>
+                    </div>
+                    <div class="toolbar-sort-group">
+                        <div>
+                            <span class="toolbar-label">Sort By</span>
+                            <select id="history-sort" class="toolbar-sort-select">
                                 <option value="desc">Most Recent First</option>
                                 <option value="asc">Oldest First</option>
                             </select>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Bulk Actions Toolbar -->
-                    <div id="bulk-history-actions" style="display: none; align-items: center; justify-content: space-between; background: #fff; padding: 12px 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eaeaea;">
-                        <div style="display: flex; align-items: center; gap: 24px;">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <input type="checkbox" id="selectAllHistory" style="cursor: pointer; width: 18px; height: 18px;">
-                                <label for="selectAllHistory" style="font-size: 0.85rem; font-weight: 600; cursor: pointer; user-select: none; color: #444;">Select All</label>
-                            </div>
-                            <span id="selected-history-count" style="font-size: 0.85rem; font-weight: 500; color: var(--brand);">(0 selected)</span>
-                        </div>
-                        <div style="display: flex; gap: 12px;">
-                            <button id="btn-bulk-export-pdf" class="btn-secondary" style="padding: 8px 16px; font-size: 0.875rem; width: auto;" disabled>📄 Export PDF</button>
-                            <button id="btn-bulk-delete" class="btn-danger" disabled>🗑️ Delete Selected</button>
-                        </div>
+                <!-- Bulk Actions Bar -->
+                <div id="bulk-history-actions" class="bulk-actions-bar" style="display: none;">
+                    <div class="bulk-select-group">
+                        <input type="checkbox" id="selectAllHistory">
+                        <label for="selectAllHistory" class="bulk-select-label">Select All</label>
+                        <span id="selected-history-count" class="bulk-selected-count">(0 selected)</span>
                     </div>
-                </header>
-                
-                <div id="history-list" class="message-list" style="background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); padding: 20px; flex: 1;">
-                    <p class="empty-msg" style="text-align: center; color: #888; padding: 40px 0;">No history available for this database.</p>
+                    <div class="bulk-action-btns">
+                        <button id="btn-bulk-export-pdf" class="btn-toolbar secondary" style="width: auto;" disabled>📄 Export PDF</button>
+                        <button id="btn-bulk-delete" class="btn-danger" style="width: auto;" disabled>🗑️ Delete Selected</button>
+                    </div>
+                </div>
+
+                <div id="history-list" class="history-list-container">
+                    <p class="empty-msg" style="text-align: center; padding: 48px 0;">No history available for this database.</p>
                 </div>
             </div> <!-- End History View -->
 
@@ -168,7 +195,7 @@
                     <label>Engine</label>
                     <select name="engine" id="db-engine">
                         <option value="postgres">PostgreSQL</option>
-                        <option value="sqlserver">SQL Server</option>
+                        <option value="mysql">MySQL</option>
                     </select>
                 </div>
                 <div class="form-row">
@@ -181,7 +208,7 @@
                     </div>
                     <div class="form-group">
                         <label>Port</label>
-                        <input type="number" name="port" value="5432" required>
+                        <input type="number" name="port" id="db-port" value="5432" required>
                     </div>
                 </div>
                 <div class="form-group">
@@ -368,6 +395,21 @@
     <!-- Apache ECharts -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <script src="js/app.js"></script>
+    <div id="toast-container"></div>
+    <div id="confirm-modal-overlay" class="confirm-modal-overlay">
+        <div class="confirm-modal">
+            <div class="confirm-modal-header">
+                <div class="confirm-modal-icon">❓</div>
+                <div class="confirm-modal-title" id="confirm-modal-title">Confirm Action</div>
+            </div>
+            <div class="confirm-modal-body">
+                <p class="confirm-modal-message" id="confirm-modal-message">Are you sure you want to proceed?</p>
+            </div>
+            <div class="confirm-modal-footer">
+                <button class="btn btn-cancel" id="confirm-modal-cancel">Cancel</button>
+                <button class="btn btn-confirm" id="confirm-modal-confirm">Confirm</button>
+            </div>
+        </div>
+    </div>
 </body>
-
 </html>

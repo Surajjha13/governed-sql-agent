@@ -1,16 +1,26 @@
 {
   "users": {
-    "suraj": {
+    "rakesh": {
       "blocked_tables": [
-        "categories",
-        "cities",
-        "countries",
-        "customers",
-        "sales",
-        "employees",
+        "city",
+        "country",
+        "film_category",
+        "category"
+      ],
+      "blocked_columns": []
+    },
+    "avi_employee": {
+      "blocked_tables": [
+        "adaniports"
+      ],
+      "blocked_columns": []
+    },
+    "employee1": {
+      "blocked_tables": [
         "actor",
         "actor_info",
-        "address"
+        "staff",
+        "staff_list"
       ],
       "blocked_columns": []
     }

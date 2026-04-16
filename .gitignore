@@ -28,3 +28,13 @@ tests/eval_results.json
 *.log
 .ipynb_checkpoints/
 models/
+
+# Local databases & backups
+*.db
+*.db.bak
+
+# Temporary directories
+tmp/
+.pytest_tmp/
+enterprise_test_tmp/
+logs/

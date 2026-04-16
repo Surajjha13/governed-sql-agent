@@ -2,15 +2,26 @@ services:
   sql-agent:
     build: .
     container_name: sql_agent_api
+    restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
       - .env
     volumes:
-      - .:/app
+      - sql_agent_models:/app/models
+      - sql_agent_logs:/app/logs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 45s
+
+volumes:
+  sql_agent_models:
+  sql_agent_logs:

@@ -2,6 +2,7 @@ import abc
 import httpx
 import logging
 from typing import List, Dict, Optional, Any
+from app.llm_service.security import validate_provider_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class LLMAdapter(abc.ABC):
 
 class GroqAdapter(LLMAdapter):
     async def chat_completion(self, messages, api_key, model, base_url=None):
-        url = base_url or "https://api.groq.com/openai/v1/chat/completions"
+        url = validate_provider_base_url("groq", base_url) or "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         payload = {"model": model, "messages": messages, "temperature": 0.1}
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -33,7 +34,7 @@ class GroqAdapter(LLMAdapter):
 
 
     async def list_models(self, api_key, base_url=None):
-        url = base_url or "https://api.groq.com/openai/v1/models"
+        url = validate_provider_base_url("groq", base_url) or "https://api.groq.com/openai/v1/models"
         headers = {"Authorization": f"Bearer {api_key}"}
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url, headers=headers)
@@ -43,7 +44,7 @@ class GroqAdapter(LLMAdapter):
 
 class OpenAIAdapter(LLMAdapter):
     async def chat_completion(self, messages, api_key, model, base_url=None):
-        url = base_url or "https://api.openai.com/v1/chat/completions"
+        url = validate_provider_base_url("openai", base_url) or "https://api.openai.com/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         payload = {"model": model, "messages": messages, "temperature": 0.1}
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -53,7 +54,7 @@ class OpenAIAdapter(LLMAdapter):
             return data["choices"][0]["message"]["content"]
 
     async def list_models(self, api_key, base_url=None):
-        url = base_url or "https://api.openai.com/v1/models"
+        url = validate_provider_base_url("openai", base_url) or "https://api.openai.com/v1/models"
         headers = {"Authorization": f"Bearer {api_key}"}
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url, headers=headers)
@@ -65,7 +66,7 @@ class OpenAIAdapter(LLMAdapter):
 class GeminiAdapter(LLMAdapter):
     async def chat_completion(self, messages, api_key, model, base_url=None):
         # Gemini OpenAI compatibility endpoint
-        url = base_url or f"https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        url = validate_provider_base_url("gemini", base_url) or "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         payload = {"model": model, "messages": messages, "temperature": 0.1}
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -76,7 +77,7 @@ class GeminiAdapter(LLMAdapter):
 
     async def list_models(self, api_key, base_url=None):
         # Gemini OpenAI compatibility list models
-        url = base_url or "https://generativelanguage.googleapis.com/v1beta/openai/v1/models"
+        url = validate_provider_base_url("gemini", base_url) or "https://generativelanguage.googleapis.com/v1beta/openai/v1/models"
         headers = {"Authorization": f"Bearer {api_key}"}
         async with httpx.AsyncClient(timeout=10.0) as client:
             try:
@@ -90,7 +91,7 @@ class GeminiAdapter(LLMAdapter):
 
 class DeepSeekAdapter(LLMAdapter):
     async def chat_completion(self, messages, api_key, model, base_url=None):
-        url = base_url or "https://api.deepseek.com/chat/completions"
+        url = validate_provider_base_url("deepseek", base_url) or "https://api.deepseek.com/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         payload = {"model": model, "messages": messages, "temperature": 0.1}
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -100,7 +101,7 @@ class DeepSeekAdapter(LLMAdapter):
             return data["choices"][0]["message"]["content"]
 
     async def list_models(self, api_key, base_url=None):
-        url = base_url or "https://api.deepseek.com/models"
+        url = validate_provider_base_url("deepseek", base_url) or "https://api.deepseek.com/models"
         headers = {"Authorization": f"Bearer {api_key}"}
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url, headers=headers)
@@ -110,7 +111,7 @@ class DeepSeekAdapter(LLMAdapter):
 
 class AnthropicAdapter(LLMAdapter):
     async def chat_completion(self, messages, api_key, model, base_url=None):
-        url = base_url or "https://api.anthropic.com/v1/messages"
+        url = validate_provider_base_url("anthropic", base_url) or "https://api.anthropic.com/v1/messages"
         headers = {
             "x-api-key": api_key,
             "anthropic-version": "2023-06-01",
@@ -144,6 +145,7 @@ class CustomAdapter(LLMAdapter):
     async def chat_completion(self, messages, api_key, model, base_url=None):
         if not base_url:
             raise ValueError("Base URL is required for Custom adapter.")
+        base_url = validate_provider_base_url("custom", base_url)
         # Custom provider usually follows OpenAI standard
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         payload = {"model": model, "messages": messages, "temperature": 0.1}
@@ -155,6 +157,7 @@ class CustomAdapter(LLMAdapter):
 
     async def list_models(self, api_key, base_url=None):
         if not base_url: return []
+        base_url = validate_provider_base_url("custom", base_url)
         # Try OpenAI standard models endpoint
         url = base_url.replace("/chat/completions", "/models")
         headers = {"Authorization": f"Bearer {api_key}"}

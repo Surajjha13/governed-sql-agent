@@ -11,7 +11,11 @@ def _normalize_set(values: List[str]) -> set:
     return {str(v).strip().lower() for v in values if str(v).strip()}
 
 
-def validate_sql_against_rbac(sql: str, restrictions: Dict[str, List[str]]) -> Optional[str]:
+def validate_sql_against_rbac(
+    sql: str,
+    restrictions: Dict[str, List[str]],
+    engine: str = "postgres"
+) -> Optional[str]:
     """
     Validate query AST against blocked tables/columns.
     Returns a human-readable denial reason if blocked; otherwise None.
@@ -22,14 +26,20 @@ def validate_sql_against_rbac(sql: str, restrictions: Dict[str, List[str]]) -> O
     if not blocked_tables and not blocked_columns:
         return None
 
+    # Wildcard block — fail-closed sentinel from get_effective_rbac_for_user
+    if "*" in blocked_tables or "*" in blocked_columns:
+        return "Access denied: your account could not be verified for RBAC. Please contact your administrator."
+
     try:
-        expression = parse_one(sql, read="postgres")
+        dialect = "mysql" if engine.lower() == "mysql" else "postgres"
+        expression = parse_one(sql, read=dialect)
     except sqlglot.errors.ParseError as e:
-        logger.warning(f"RBAC guard skipped (parse error): {e}")
-        return None
+        # FAIL-CLOSED: if we can't parse the SQL, deny it when RBAC is active
+        logger.warning(f"RBAC guard DENIED (parse error, restrictions active): {e}")
+        return "Access denied: the generated query could not be validated against your access policy. Please try rephrasing your question."
     except Exception as e:
-        logger.warning(f"RBAC guard skipped (unexpected parse failure): {e}")
-        return None
+        logger.warning(f"RBAC guard DENIED (unexpected parse failure, restrictions active): {e}")
+        return "Access denied: the generated query could not be validated against your access policy. Please try rephrasing your question."
 
     referenced_tables = set()
     for tbl in expression.find_all(exp.Table):
@@ -67,4 +77,3 @@ def validate_sql_against_rbac(sql: str, restrictions: Dict[str, List[str]]) -> O
                     return f"Access denied: administrator restricted column '{blocked_full}'."
 
     return None
-

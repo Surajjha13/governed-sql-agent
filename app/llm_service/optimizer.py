@@ -1,4 +1,5 @@
 import logging
+import re
 import sqlglot
 from sqlglot import exp, parse_one
 import sqlglot.optimizer as sqlglot_optimizer
@@ -7,51 +8,106 @@ from app.schema_service.models import SchemaResponse
 
 logger = logging.getLogger(__name__)
 
-def optimize_sql(sql: str, schema: SchemaResponse) -> str:
+def optimize_sql(sql: str, schema: SchemaResponse, engine: str = "postgres") -> str:
     """
     Apply performance-focused rewrites to generated SQL.
-    Targets Postgres dialiect.
     """
     if not sql:
         return sql
 
-    # 1. Clean markdown if present
-    processed = sql.replace("```sql", "").replace("```", "").strip()
+    dialect = "mysql" if engine.lower() == "mysql" else "postgres"
     
-    # 2. Remove leaking management commands (CONNECT TO, SET, etc.)
-    # We do this before parsing to ensure robust cleaning even if parsing fails
-    import re
+    # 1. Clean markdown and artifacts
+    processed = sql.replace("```sql", "").replace("```", "").strip()
     processed = re.sub(r'^(?:CONNECT TO|SET search_path|SET)\s+.*;?\s*', '', processed, flags=re.MULTILINE | re.IGNORECASE)
     processed = processed.strip()
 
     try:
+        # Pre-pass: Fix triple identifiers like "a"."fl"."price" -> "fl"."price"
+        processed = re.sub(r'"?([^".\s]+)"?\."?([^".\s]+)"?\."?([^".\s]+)"?', r'"\2"."\3"', processed)
+
         # Parse into AST
-        expression = parse_one(processed, read="postgres")
+        expression = parse_one(processed, read=dialect)
 
-        # 1. Redundant Select Removal (SELECT * -> Specific Columns)
-        # This is already partially handled by prompt, but we reinforce it here
-        if any(isinstance(e, exp.Star) for e in expression.find_all(exp.Star)):
-            # If we find a star, we try to expand it if we can infer the table
-            # For now, we prefer to let the validator catch and fail this to maintain safety
-            pass
-
-        # 2. Window Function Promotion (Top-1 per group pattern)
-        # Pattern: SELECT ... FROM t WHERE col IN (SELECT MAX(col) FROM t GROUP BY grp)
-        # Rewrite to: SELECT ... FROM (SELECT ..., ROW_NUMBER() OVER(PARTITION BY grp ORDER BY col DESC) as rn) WHERE rn = 1
+        # 1. Window Function Promotion
         expression = _apply_window_optimizations(expression)
 
-        # 3. Join Optimization
-        # Remove joins to tables where no columns are used and the join is on a PK
+        # 2. Join Optimization (Path-aware)
         expression = _remove_redundant_joins(expression)
 
-        # 4. Standard sqlglot optimizations (constant folding, predicate pushdown)
-        optimized = sqlglot_optimizer.optimize(expression, dialect="postgres")
+        # 3. Standard sqlglot optimizations
+        optimized = sqlglot_optimizer.optimize(expression, dialect=dialect)
 
-        return optimized.sql(dialect="postgres", pretty=True)
+        return optimized.sql(dialect=dialect, pretty=True)
 
     except Exception as e:
         logger.warning(f"Optimization pass failed: {e}. Returning cleaned SQL.")
         return processed
+
+def _remove_redundant_joins(expression: exp.Expression) -> exp.Expression:
+    """
+    Removes joins only if they are truly not referenced anywhere in the query.
+    References include SELECT columns, WHERE filters, GROUP BY, and the ON clauses 
+    of other joins (path dependency).
+    """
+    if not isinstance(expression, exp.Select):
+        return expression
+
+    # 1. Collect ALL identifiers that could be table/alias references
+    referenced_identifiers = set()
+    
+    def add_ref(node):
+        if node and hasattr(node, "this"):
+            # Strip quotes and normalize to lowercase
+            name = str(node.this).lower().replace('"', '').replace("'", "")
+            referenced_identifiers.add(name)
+        elif node:
+            name = str(node).lower().replace('"', '').replace("'", "")
+            referenced_identifiers.add(name)
+
+    # Check all columns across the entire query
+    for col in expression.find_all(exp.Column):
+        if col.table:
+            add_ref(col.table)
+    
+    # Check all identifiers in JOIN conditions (the ON clause)
+    # This ensures "bridge" tables like film_actor are NOT removed if used in the 
+    # next join's path.
+    for join in expression.args.get("joins", []):
+        on_clause = join.args.get("on")
+        if on_clause:
+            for col in on_clause.find_all(exp.Column):
+                if col.table:
+                    add_ref(col.table)
+    
+    # 2. Conservative Filter
+    new_joins = []
+    for join in expression.args.get("joins", []):
+        join_target = join.this
+        
+        # Extract the alias or table name for this join
+        target_token = None
+        if isinstance(join_target, exp.Alias):
+            target_token = join_target.alias
+        elif isinstance(join_target, exp.Table):
+            # sqlglot Table node might have an internal alias or just a name
+            alias_node = join_target.args.get("alias")
+            target_token = alias_node if alias_node else join_target.this
+            
+        # Normalize to string (unquoted)
+        target_str = ""
+        if hasattr(target_token, "this"):
+            target_str = str(target_token.this).lower().replace('"', '').replace("'", "")
+        else:
+            target_str = str(target_token).lower().replace('"', '').replace("'", "")
+
+        if not target_str or target_str in referenced_identifiers:
+            new_joins.append(join)
+        else:
+            logger.info(f"Removing truly redundant join to: {target_str}")
+    
+    expression.set("joins", new_joins)
+    return expression
 
 def _apply_window_optimizations(expression: exp.Expression) -> exp.Expression:
     """
@@ -67,81 +123,7 @@ def _apply_window_optimizations(expression: exp.Expression) -> exp.Expression:
                 groups = subselect.args.get("group")
                 if groups and any(isinstance(s, exp.Max) for s in subselect.expressions):
                     # This is a candidate for ROW_NUMBER() promotion
-                    # For simplicity in this agentic implementation, we rely on sqlglot's 
-                    # optimize.optimize() to handle canonical predicate pushdown and simplification.
-                    # We will however ensure that any 'LIMIT' inside a subquery is moved to a RANK/ROW_NUMBER
-                    # if it's used for per-group filtering.
                     pass
         return node
 
     return expression.transform(transform)
-
-def _remove_redundant_joins(expression: exp.Expression) -> exp.Expression:
-    """
-    Removes joins if:
-    1. Only the join key is used (which is already in the parent table).
-    2. No columns from the joined table (or its alias) are in the SELECT or WHERE clauses.
-    """
-    if not isinstance(expression, exp.Select):
-        return expression
-
-    # Collect all table names and aliases referenced in columns
-    referenced_tables = set()
-    for col in expression.find_all(exp.Column):
-        if col.table:
-            # sqlglot might return an Identifier object or a string. 
-            # We want the normalized string.
-            table_ref = col.table
-            if hasattr(table_ref, "this"):
-                table_ref = table_ref.this
-            referenced_tables.add(str(table_ref))
-    
-    print(f"DEBUG: referenced_tables: {referenced_tables}")
-    
-    new_joins = []
-    for join in expression.args.get("joins", []):
-        # In sqlglot, joins can have aliases. We need to check both the table name and the alias.
-        join_target = join.this
-        print(f"DEBUG: Join target type: {type(join_target)}")
-        if isinstance(join_target, exp.Alias):
-            print(f"DEBUG: Join target is Alias. Alias: {join_target.alias}, this: {type(join_target.this)}")
-        
-        table_name = None
-        alias = None
-        
-        if isinstance(join_target, exp.Alias):
-            alias = join_target.alias
-            if isinstance(join_target.this, exp.Table):
-                table_name = join_target.this.name
-        elif isinstance(join_target, exp.Table):
-            table_name = join_target.name
-            alias = join_target.args.get("alias")
-            
-        # Normalize strings for comparison
-        # In sqlglot, alias might be an Alias node or an Identifier node
-        alias_str = None
-        if alias:
-            if hasattr(alias, "this"):
-                alias_str = str(alias.this)
-            elif hasattr(alias, "alias"):
-                alias_str = str(alias.alias)
-            else:
-                alias_str = str(alias)
-
-        table_str = str(table_name.this if hasattr(table_name, "this") else table_name) if table_name else None
-
-        # If either the table name or the alias is referenced, keep the join
-        is_referenced = (table_str and table_str in referenced_tables) or \
-                        (alias_str and alias_str in referenced_tables)
-        
-        if is_referenced:
-            new_joins.append(join)
-        else:
-            # Also keep it if it's a subquery or something else we don't handle well yet
-            if not table_name and not alias:
-                new_joins.append(join)
-            else:
-                logger.info(f"Removing redundant join to: {alias_str or table_str}")
-    
-    expression.set("joins", new_joins)
-    return expression

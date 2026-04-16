@@ -61,3 +61,47 @@ def test_execute_sql_without_connection_returns_error():
     assert "error" in results
 
     app_state.disconnect_db(session_id)
+
+
+def test_execute_sql_mysql_uses_fetchmany_and_caps_results():
+    session_id = "mysql_pool_test"
+    state = app_state.get_session(session_id)
+    state.current_connection = {
+        "engine": "mysql",
+        "host": "localhost",
+        "port": 3306,
+        "database": "testdb",
+        "user": "user",
+        "password": "password",
+        "connected": True,
+    }
+
+    mock_pool = MagicMock()
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.description = [("id",), ("name",)]
+    mock_cursor.fetchmany.return_value = [
+        {"id": 1, "name": "one"},
+        {"id": 2, "name": "two"},
+        {"id": 3, "name": "three"},
+    ]
+
+    mock_cursor_ctx = MagicMock()
+    mock_cursor_ctx.__enter__.return_value = mock_cursor
+    mock_conn.cursor.return_value = mock_cursor_ctx
+    mock_pool.getconn.return_value = mock_conn
+
+    state.db_pool = mock_pool
+    state.pool_signature = "mysql|localhost|3306|testdb|user|password"
+
+    results = execute_sql("SELECT `id`, `name` FROM `table_name`", session_id=session_id, row_limit=2)
+
+    assert results["columns"] == ["id", "name"]
+    assert results["returned_rows"] == 2
+    assert results["truncated"] is True
+    assert results["rows"][0]["id"] == 1
+    assert results["rows"][1]["name"] == "two"
+    mock_cursor.fetchmany.assert_called_once_with(3)
+    mock_cursor.fetchall.assert_not_called()
+
+    app_state.disconnect_db(session_id)
